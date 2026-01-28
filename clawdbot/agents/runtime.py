@@ -118,10 +118,7 @@ class MultiProviderRuntime:
         self.fallback_chain = None
         self.fallback_manager = None
         if fallback_models:
-            self.fallback_chain = FallbackChain(
-                primary=model,
-                fallbacks=fallback_models
-            )
+            self.fallback_chain = FallbackChain(primary=model, fallbacks=fallback_models)
             self.fallback_manager = FallbackManager(self.fallback_chain)
 
         # Auth rotation
@@ -142,10 +139,7 @@ class MultiProviderRuntime:
         self.compaction_strategy = compaction_strategy
         if self.context_manager:
             self.token_analyzer = TokenAnalyzer(self.model_name)
-            self.compaction_manager = CompactionManager(
-                self.token_analyzer,
-                compaction_strategy
-            )
+            self.compaction_manager = CompactionManager(self.token_analyzer, compaction_strategy)
         else:
             self.token_analyzer = None
             self.compaction_manager = None
@@ -236,6 +230,7 @@ class MultiProviderRuntime:
 
         # Wrap in queue if enabled
         if self.queue_manager:
+
             async def queued_execution():
                 async for event in self._run_turn_internal(session, message, tools, max_tokens):
                     yield event
@@ -265,35 +260,34 @@ class MultiProviderRuntime:
             window = self.context_manager.check_context(current_tokens)
 
             if window.should_compress:
-                logger.info(
-                    f"Context at {current_tokens}/{window.total_tokens} tokens, compacting"
-                )
+                logger.info(f"Context at {current_tokens}/{window.total_tokens} tokens, compacting")
                 # Use advanced compaction
                 target_tokens = int(window.total_tokens * 0.7)  # Use 70% of window
-                compacted = self.compaction_manager.compact(
-                    messages_for_api,
-                    target_tokens
-                )
+                compacted = self.compaction_manager.compact(messages_for_api, target_tokens)
 
                 # Update session with compacted messages
                 # Convert back to Message objects
                 from .session import Message
+
                 session.messages = [
                     Message(
                         role=m["role"],
                         content=m["content"],
                         tool_calls=m.get("tool_calls"),
                         tool_call_id=m.get("tool_call_id"),
-                        name=m.get("name")
+                        name=m.get("name"),
                     )
                     for m in compacted
                 ]
 
-                yield AgentEvent("compaction", {
-                    "original_tokens": current_tokens,
-                    "compacted_tokens": self.token_analyzer.estimate_messages_tokens(compacted),
-                    "strategy": self.compaction_strategy.value
-                })
+                yield AgentEvent(
+                    "compaction",
+                    {
+                        "original_tokens": current_tokens,
+                        "compacted_tokens": self.token_analyzer.estimate_messages_tokens(compacted),
+                        "strategy": self.compaction_strategy.value,
+                    },
+                )
 
         yield AgentEvent("lifecycle", {"phase": "start"})
 
@@ -343,8 +337,8 @@ class MultiProviderRuntime:
 
                         # Extract thinking if enabled
                         if self.thinking_mode != ThinkingMode.OFF and self.thinking_extractor:
-                            thinking_delta, content_delta = self.thinking_extractor.extract_streaming(
-                                text, thinking_state
+                            thinking_delta, content_delta = (
+                                self.thinking_extractor.extract_streaming(text, thinking_state)
                             )
 
                             # Stream thinking separately if mode is STREAM
@@ -352,20 +346,19 @@ class MultiProviderRuntime:
                                 accumulated_thinking += thinking_delta
                                 yield AgentEvent(
                                     "thinking",
-                                    {"delta": {"text": thinking_delta}, "mode": "stream"}
+                                    {"delta": {"text": thinking_delta}, "mode": "stream"},
                                 )
 
                             # Stream content (non-thinking text)
                             if content_delta:
                                 yield AgentEvent(
                                     "assistant",
-                                    {"delta": {"type": "text_delta", "text": content_delta}}
+                                    {"delta": {"type": "text_delta", "text": content_delta}},
                                 )
                         else:
                             # No thinking extraction, stream as-is
                             yield AgentEvent(
-                                "assistant",
-                                {"delta": {"type": "text_delta", "text": text}}
+                                "assistant", {"delta": {"type": "text_delta", "text": text}}
                             )
 
                     elif response.type == "tool_call":
@@ -377,8 +370,7 @@ class MultiProviderRuntime:
                             if tool:
                                 # Format tool use
                                 formatted_use = self.tool_formatter.format_tool_use(
-                                    tc["name"],
-                                    tc["arguments"]
+                                    tc["name"], tc["arguments"]
                                 )
 
                                 yield AgentEvent(
@@ -386,8 +378,8 @@ class MultiProviderRuntime:
                                     {
                                         "tool": tc["name"],
                                         "input": tc["arguments"],
-                                        "formatted": formatted_use
-                                    }
+                                        "formatted": formatted_use,
+                                    },
                                 )
 
                                 # Execute tool
@@ -398,9 +390,7 @@ class MultiProviderRuntime:
 
                                     # Format tool result
                                     formatted_result = self.tool_formatter.format_tool_result(
-                                        tc["name"],
-                                        output,
-                                        success
+                                        tc["name"], output, success
                                     )
 
                                     yield AgentEvent(
@@ -409,23 +399,19 @@ class MultiProviderRuntime:
                                             "tool": tc["name"],
                                             "result": output,
                                             "success": success,
-                                            "formatted": formatted_result
+                                            "formatted": formatted_result,
                                         },
                                     )
 
                                     # Add tool result to session
                                     session.add_tool_message(
-                                        tool_call_id=tc["id"],
-                                        content=output,
-                                        name=tc["name"]
+                                        tool_call_id=tc["id"], content=output, name=tc["name"]
                                     )
 
                                 except Exception as tool_error:
                                     error_msg = str(tool_error)
                                     formatted_error = self.tool_formatter.format_tool_result(
-                                        tc["name"],
-                                        error_msg,
-                                        success=False
+                                        tc["name"], error_msg, success=False
                                     )
 
                                     yield AgentEvent(
@@ -435,14 +421,14 @@ class MultiProviderRuntime:
                                             "result": error_msg,
                                             "success": False,
                                             "error": error_msg,
-                                            "formatted": formatted_error
+                                            "formatted": formatted_error,
                                         },
                                     )
 
                                     session.add_tool_message(
                                         tool_call_id=tc["id"],
                                         content=f"Error: {error_msg}",
-                                        name=tc["name"]
+                                        name=tc["name"],
                                     )
 
                     elif response.type == "done":
@@ -453,11 +439,7 @@ class MultiProviderRuntime:
                             if extracted.has_thinking:
                                 # Include thinking in response
                                 yield AgentEvent(
-                                    "thinking",
-                                    {
-                                        "content": extracted.thinking,
-                                        "mode": "on"
-                                    }
+                                    "thinking", {"content": extracted.thinking, "mode": "on"}
                                 )
                                 final_text = extracted.content
 
@@ -501,8 +483,8 @@ class MultiProviderRuntime:
                                     "from": current_model,
                                     "to": next_model,
                                     "reason": failover_reason.value,
-                                    "error": str(e)
-                                }
+                                    "error": str(e),
+                                },
                             )
 
                             # Continue to next attempt (no sleep, immediate retry with new model)
@@ -513,10 +495,7 @@ class MultiProviderRuntime:
                     logger.error(f"Non-retryable error: {format_error_message(e)}")
                     yield AgentEvent(
                         "error",
-                        {
-                            "message": format_error_message(e),
-                            "category": classify_error(e).value
-                        },
+                        {"message": format_error_message(e), "category": classify_error(e).value},
                     )
                     yield AgentEvent("lifecycle", {"phase": "end"})
                     return

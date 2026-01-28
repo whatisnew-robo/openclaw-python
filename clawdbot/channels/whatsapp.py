@@ -1,7 +1,7 @@
 """WhatsApp channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -63,7 +63,7 @@ class WhatsAppChannel(ChannelPlugin):
 
         # TODO: Implement message sending
         logger.warning(f"WhatsApp send_text not implemented: {target}")
-        return f"whatsapp-msg-{datetime.utcnow().timestamp()}"
+        return f"whatsapp-msg-{datetime.now(UTC).timestamp()}"
 
     async def send_media(
         self, target: str, media_url: str, media_type: str, caption: str | None = None
@@ -74,7 +74,7 @@ class WhatsAppChannel(ChannelPlugin):
 
         # TODO: Implement media sending
         logger.warning(f"WhatsApp send_media not implemented: {target}")
-        return f"whatsapp-media-{datetime.utcnow().timestamp()}"
+        return f"whatsapp-media-{datetime.now(UTC).timestamp()}"
 
     async def login_with_qr(self) -> str:
         """Generate QR code for login"""

@@ -5,7 +5,7 @@ API key management and validation
 import hashlib
 import logging
 import secrets
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Header, HTTPException, status
 from pydantic import BaseModel, Field
@@ -31,7 +31,7 @@ class APIKey(BaseModel):
         if not self.enabled:
             return False
 
-        if self.expires_at and datetime.utcnow() > self.expires_at:
+        if self.expires_at and datetime.now(UTC) > self.expires_at:
             return False
 
         return True
@@ -42,7 +42,7 @@ class APIKey(BaseModel):
 
     def update_last_used(self) -> None:
         """Update last used timestamp"""
-        self.last_used = datetime.utcnow()
+        self.last_used = datetime.now(UTC)
 
 
 class APIKeyManager:
@@ -90,7 +90,7 @@ class APIKeyManager:
         # Calculate expiration
         expires_at = None
         if expires_days:
-            expires_at = datetime.utcnow() + timedelta(days=expires_days)
+            expires_at = datetime.now(UTC) + timedelta(days=expires_days)
 
         # Create APIKey object
         api_key = APIKey(
@@ -193,7 +193,7 @@ class APIKeyManager:
         """
         expired = []
         for key_id, api_key in self._keys.items():
-            if api_key.expires_at and datetime.utcnow() > api_key.expires_at:
+            if api_key.expires_at and datetime.now(UTC) > api_key.expires_at:
                 expired.append(key_id)
 
         for key_id in expired:

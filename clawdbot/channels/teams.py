@@ -1,7 +1,7 @@
 """Microsoft Teams channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -60,7 +60,7 @@ class TeamsChannel(ChannelPlugin):
             raise RuntimeError("Teams channel not started")
 
         logger.info(f"Teams send_text to {target}")
-        return f"teams-msg-{datetime.utcnow().timestamp()}"
+        return f"teams-msg-{datetime.now(UTC).timestamp()}"
 
     async def send_media(
         self, target: str, media_url: str, media_type: str, caption: str | None = None
@@ -70,7 +70,7 @@ class TeamsChannel(ChannelPlugin):
             raise RuntimeError("Teams channel not started")
 
         logger.info(f"Teams send_media to {target}")
-        return f"teams-media-{datetime.utcnow().timestamp()}"
+        return f"teams-media-{datetime.now(UTC).timestamp()}"
 
 
 # Note: Full Teams implementation requires:

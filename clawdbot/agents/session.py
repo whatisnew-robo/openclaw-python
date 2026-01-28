@@ -4,7 +4,7 @@ Session management for agent conversations
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -48,8 +48,8 @@ class Session(BaseModel):
     workspace_dir: Path
     messages: list[Message] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -78,7 +78,7 @@ class Session(BaseModel):
         """Add a message to the session"""
         msg = Message(role=role, content=content, **kwargs)
         self.messages.append(msg)
-        self.updated_at = datetime.utcnow().isoformat()
+        self.updated_at = datetime.now(UTC).isoformat()
         self._save()
         return msg
 

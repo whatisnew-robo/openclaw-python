@@ -5,7 +5,7 @@ Auth profile data structures
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +37,7 @@ class AuthProfile:
         """Check if profile is available (not in cooldown)"""
         if self.cooldown_until is None:
             return True
-        return datetime.utcnow() >= self.cooldown_until
+        return datetime.now(UTC) >= self.cooldown_until
 
     def get_api_key(self) -> str:
         """

@@ -6,7 +6,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class ConnectionMetrics:
     def get_uptime_seconds(self) -> float | None:
         """Get uptime in seconds"""
         if self.connected_at:
-            end_time = self.disconnected_at or datetime.utcnow()
+            end_time = self.disconnected_at or datetime.now(UTC)
             return (end_time - self.connected_at).total_seconds()
         return None
 
@@ -67,7 +67,7 @@ class ConnectionMetrics:
         """Record an error"""
         self.errors_count += 1
         self.last_error = error
-        self.last_error_at = datetime.utcnow()
+        self.last_error_at = datetime.now(UTC)
 
     def record_message_sent(self) -> None:
         """Record sent message"""
@@ -79,7 +79,7 @@ class ConnectionMetrics:
 
     def record_heartbeat(self) -> None:
         """Record heartbeat"""
-        self.last_heartbeat = datetime.utcnow()
+        self.last_heartbeat = datetime.now(UTC)
 
 
 @dataclass
@@ -175,7 +175,7 @@ class ConnectionManager:
         try:
             await self._connect_fn()
             await self._set_state(ConnectionState.CONNECTED)
-            self._metrics.connected_at = datetime.utcnow()
+            self._metrics.connected_at = datetime.now(UTC)
             self._metrics.disconnected_at = None
             self._current_attempt = 0
             logger.info(f"[{self.channel_id}] Connected successfully")
@@ -210,7 +210,7 @@ class ConnectionManager:
             except Exception as e:
                 logger.error(f"[{self.channel_id}] Disconnect error: {e}")
 
-        self._metrics.disconnected_at = datetime.utcnow()
+        self._metrics.disconnected_at = datetime.now(UTC)
         await self._set_state(ConnectionState.STOPPED)
         logger.info(f"[{self.channel_id}] Disconnected")
 
@@ -243,10 +243,10 @@ class ConnectionManager:
             try:
                 await self._connect_fn()
                 await self._set_state(ConnectionState.CONNECTED)
-                self._metrics.connected_at = datetime.utcnow()
+                self._metrics.connected_at = datetime.now(UTC)
                 self._metrics.disconnected_at = None
                 self._metrics.reconnect_count += 1
-                self._metrics.last_reconnect_at = datetime.utcnow()
+                self._metrics.last_reconnect_at = datetime.now(UTC)
                 self._current_attempt = 0
                 logger.info(f"[{self.channel_id}] Reconnected successfully")
                 return
@@ -365,7 +365,7 @@ class HealthChecker:
 
     async def _perform_check(self) -> None:
         """Perform single health check"""
-        self._last_check = datetime.utcnow()
+        self._last_check = datetime.now(UTC)
 
         try:
             healthy = await asyncio.wait_for(self._check_fn(), timeout=self._timeout)

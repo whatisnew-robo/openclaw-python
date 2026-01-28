@@ -1,7 +1,7 @@
 """BlueBubbles channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -51,7 +51,7 @@ class BlueBubblesChannel(ChannelPlugin):
             raise RuntimeError("BlueBubbles channel not started")
 
         logger.info(f"BlueBubbles send to {target}")
-        return f"bb-msg-{datetime.utcnow().timestamp()}"
+        return f"bb-msg-{datetime.now(UTC).timestamp()}"
 
     async def send_media(
         self, target: str, media_url: str, media_type: str, caption: str | None = None
@@ -61,4 +61,4 @@ class BlueBubblesChannel(ChannelPlugin):
             raise RuntimeError("BlueBubbles channel not started")
 
         logger.info(f"BlueBubbles media to {target}")
-        return f"bb-media-{datetime.utcnow().timestamp()}"
+        return f"bb-media-{datetime.now(UTC).timestamp()}"

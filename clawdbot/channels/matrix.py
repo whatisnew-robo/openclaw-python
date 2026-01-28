@@ -1,7 +1,7 @@
 """Matrix channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -106,4 +106,4 @@ class MatrixChannel(ChannelPlugin):
         # TODO: Implement Matrix media sending
         # Requires uploading to Matrix content repository first
         logger.warning(f"Matrix send_media not fully implemented: {target}")
-        return f"matrix-media-{datetime.utcnow().timestamp()}"
+        return f"matrix-media-{datetime.now(UTC).timestamp()}"

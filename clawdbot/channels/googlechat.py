@@ -1,7 +1,7 @@
 """Google Chat channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -83,7 +83,7 @@ class GoogleChatChannel(ChannelPlugin):
 
         # TODO: Implement Google Chat message sending via Chat API
         logger.warning(f"Google Chat send_text not implemented: {target}")
-        return f"googlechat-msg-{datetime.utcnow().timestamp()}"
+        return f"googlechat-msg-{datetime.now(UTC).timestamp()}"
 
     async def send_media(
         self, target: str, media_url: str, media_type: str, caption: str | None = None
@@ -94,7 +94,7 @@ class GoogleChatChannel(ChannelPlugin):
 
         # TODO: Implement Google Chat media sending
         logger.warning(f"Google Chat send_media not implemented: {target}")
-        return f"googlechat-media-{datetime.utcnow().timestamp()}"
+        return f"googlechat-media-{datetime.now(UTC).timestamp()}"
 
 
 # Note: Full Google Chat implementation requires:

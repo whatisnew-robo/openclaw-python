@@ -1,7 +1,7 @@
 """LINE channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -72,7 +72,7 @@ class LINEChannel(ChannelPlugin):
 
         if not self._api:
             logger.warning("LINE API not initialized")
-            return f"line-msg-{datetime.utcnow().timestamp()}"
+            return f"line-msg-{datetime.now(UTC).timestamp()}"
 
         try:
             from linebot.models import TextSendMessage
@@ -84,7 +84,7 @@ class LINEChannel(ChannelPlugin):
                 # Push message
                 self._api.push_message(target, TextSendMessage(text=text))
 
-            return f"line-msg-{datetime.utcnow().timestamp()}"
+            return f"line-msg-{datetime.now(UTC).timestamp()}"
 
         except Exception as e:
             logger.error(f"LINE send error: {e}", exc_info=True)
@@ -99,7 +99,7 @@ class LINEChannel(ChannelPlugin):
 
         if not self._api:
             logger.warning("LINE API not initialized")
-            return f"line-media-{datetime.utcnow().timestamp()}"
+            return f"line-media-{datetime.now(UTC).timestamp()}"
 
         try:
             from linebot.models import AudioSendMessage, ImageSendMessage, VideoSendMessage
@@ -119,7 +119,7 @@ class LINEChannel(ChannelPlugin):
                 message = TextSendMessage(text=f"{caption or 'Media'}: {media_url}")
 
             self._api.push_message(target, message)
-            return f"line-media-{datetime.utcnow().timestamp()}"
+            return f"line-media-{datetime.now(UTC).timestamp()}"
 
         except Exception as e:
             logger.error(f"LINE media send error: {e}", exc_info=True)

@@ -4,7 +4,7 @@ FastAPI REST API server for ClawdBot
 
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -196,7 +196,7 @@ def create_app() -> FastAPI:
         if not is_alive:
             raise HTTPException(status_code=503, detail="Not alive")
 
-        return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+        return {"status": "ok", "timestamp": datetime.now(UTC).isoformat()}
 
     @app.get("/health/ready", tags=["Health"])
     async def readiness():
@@ -211,7 +211,7 @@ def create_app() -> FastAPI:
         if not is_ready:
             raise HTTPException(status_code=503, detail="Not ready")
 
-        return {"status": "ready", "timestamp": datetime.utcnow().isoformat()}
+        return {"status": "ready", "timestamp": datetime.now(UTC).isoformat()}
 
     # Metrics endpoints
     @app.get("/metrics", tags=["Metrics"])
@@ -421,7 +421,7 @@ def create_app() -> FastAPI:
             "name": "ClawdBot API",
             "version": "0.3.2",
             "status": "running",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "docs": "/docs",
             "health": "/health",
             "metrics": "/metrics",

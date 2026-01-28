@@ -6,7 +6,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -84,14 +84,14 @@ class HealthCheck:
 
     def __init__(self):
         self._checks: dict[str, Callable[[], Awaitable[ComponentHealth]]] = {}
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(UTC)
         self._last_results: dict[str, ComponentHealth] = {}
         self._check_timeout = 10.0  # seconds
 
     @property
     def uptime_seconds(self) -> float:
         """Get system uptime in seconds"""
-        return (datetime.utcnow() - self._start_time).total_seconds()
+        return (datetime.now(UTC) - self._start_time).total_seconds()
 
     def register(
         self, name: str, check_fn: Callable[[], Awaitable[bool]], critical: bool = True
@@ -106,16 +106,16 @@ class HealthCheck:
         """
 
         async def wrapper() -> ComponentHealth:
-            start = datetime.utcnow()
+            start = datetime.now(UTC)
             try:
                 result = await asyncio.wait_for(check_fn(), timeout=self._check_timeout)
-                elapsed = (datetime.utcnow() - start).total_seconds() * 1000
+                elapsed = (datetime.now(UTC) - start).total_seconds() * 1000
 
                 return ComponentHealth(
                     name=name,
                     status=HealthStatus.HEALTHY if result else HealthStatus.UNHEALTHY,
                     message="OK" if result else "Check failed",
-                    last_check=datetime.utcnow(),
+                    last_check=datetime.now(UTC),
                     response_time_ms=elapsed,
                     details={"critical": critical},
                 )
@@ -124,16 +124,16 @@ class HealthCheck:
                     name=name,
                     status=HealthStatus.UNHEALTHY,
                     message="Check timed out",
-                    last_check=datetime.utcnow(),
+                    last_check=datetime.now(UTC),
                     details={"critical": critical, "error": "timeout"},
                 )
             except Exception as e:
-                elapsed = (datetime.utcnow() - start).total_seconds() * 1000
+                elapsed = (datetime.now(UTC) - start).total_seconds() * 1000
                 return ComponentHealth(
                     name=name,
                     status=HealthStatus.UNHEALTHY,
                     message=str(e),
-                    last_check=datetime.utcnow(),
+                    last_check=datetime.now(UTC),
                     response_time_ms=elapsed,
                     details={"critical": critical, "error": type(e).__name__},
                 )
@@ -166,7 +166,7 @@ class HealthCheck:
         if not self._checks:
             return HealthCheckResponse(
                 status=HealthStatus.HEALTHY.value,
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 uptime_seconds=self.uptime_seconds,
                 components={},
             )
@@ -188,7 +188,7 @@ class HealthCheck:
                     name=name,
                     status=HealthStatus.UNHEALTHY,
                     message=str(result),
-                    last_check=datetime.utcnow(),
+                    last_check=datetime.now(UTC),
                     details={"error": type(result).__name__},
                 )
             else:
@@ -215,7 +215,7 @@ class HealthCheck:
 
         return HealthCheckResponse(
             status=overall_status.value,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             uptime_seconds=self.uptime_seconds,
             components=components,
         )

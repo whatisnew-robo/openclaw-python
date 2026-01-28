@@ -3,7 +3,7 @@ Tests for enhanced channel system
 """
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -69,7 +69,7 @@ class TestConnectionMetrics:
 
     def test_uptime(self):
         metrics = ConnectionMetrics()
-        metrics.connected_at = datetime.utcnow()
+        metrics.connected_at = datetime.now(UTC)
 
         uptime = metrics.get_uptime_seconds()
         assert uptime is not None

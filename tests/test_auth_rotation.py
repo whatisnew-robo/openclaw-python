@@ -2,7 +2,7 @@
 Tests for auth profile rotation
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -27,7 +27,7 @@ class TestAuthProfile:
             id="test",
             provider="anthropic",
             api_key="key",
-            cooldown_until=datetime.utcnow() + timedelta(minutes=5),
+            cooldown_until=datetime.now(UTC) + timedelta(minutes=5),
         )
 
         assert not profile.is_available()
@@ -141,7 +141,7 @@ class TestRotationManager:
             id="p1",
             provider="anthropic",
             api_key="k1",
-            cooldown_until=datetime.utcnow() + timedelta(hours=1),
+            cooldown_until=datetime.now(UTC) + timedelta(hours=1),
         )
         p2 = AuthProfile(id="p2", provider="anthropic", api_key="k2")
         store.add_profile(p1)
@@ -203,7 +203,7 @@ class TestRotationManager:
             provider="anthropic",
             api_key="key",
             failure_count=5,
-            cooldown_until=datetime.utcnow() + timedelta(hours=1),
+            cooldown_until=datetime.now(UTC) + timedelta(hours=1),
         )
         store.add_profile(profile)
 

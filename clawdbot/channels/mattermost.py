@@ -1,7 +1,7 @@
 """Mattermost channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -88,7 +88,7 @@ class MattermostChannel(ChannelPlugin):
 
         if not self._driver:
             logger.warning("Mattermost driver not initialized")
-            return f"mm-msg-{datetime.utcnow().timestamp()}"
+            return f"mm-msg-{datetime.now(UTC).timestamp()}"
 
         try:
             post = {"channel_id": target, "message": text}
@@ -111,4 +111,4 @@ class MattermostChannel(ChannelPlugin):
 
         # Mattermost requires uploading files first, then attaching to post
         logger.info(f"Mattermost media to {target}")
-        return f"mm-media-{datetime.utcnow().timestamp()}"
+        return f"mm-media-{datetime.now(UTC).timestamp()}"

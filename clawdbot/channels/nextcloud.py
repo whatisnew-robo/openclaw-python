@@ -1,7 +1,7 @@
 """Nextcloud Talk channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -54,7 +54,7 @@ class NextcloudChannel(ChannelPlugin):
             raise RuntimeError("Nextcloud Talk channel not started")
 
         logger.info(f"Nextcloud Talk send to {target}")
-        return f"nc-msg-{datetime.utcnow().timestamp()}"
+        return f"nc-msg-{datetime.now(UTC).timestamp()}"
 
     async def send_media(
         self, target: str, media_url: str, media_type: str, caption: str | None = None
@@ -64,4 +64,4 @@ class NextcloudChannel(ChannelPlugin):
             raise RuntimeError("Nextcloud Talk channel not started")
 
         logger.info(f"Nextcloud Talk media to {target}")
-        return f"nc-media-{datetime.utcnow().timestamp()}"
+        return f"nc-media-{datetime.now(UTC).timestamp()}"

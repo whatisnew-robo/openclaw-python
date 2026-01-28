@@ -1,7 +1,7 @@
 """Cron job management tool using APScheduler"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from .base import AgentTool, ToolResult
@@ -92,7 +92,7 @@ class CronTool(AgentTool):
 
     async def _add_job(self, params: dict[str, Any]) -> ToolResult:
         """Add scheduled job"""
-        job_id = params.get("job_id") or f"job-{int(datetime.utcnow().timestamp())}"
+        job_id = params.get("job_id") or f"job-{int(datetime.now(UTC).timestamp())}"
         schedule = params.get("schedule", "")
         task = params.get("task", "")
         message = params.get("message", "")
@@ -126,7 +126,7 @@ class CronTool(AgentTool):
             "task": task,
             "message": message,
             "session_id": session_id,
-            "created": datetime.utcnow().isoformat(),
+            "created": datetime.now(UTC).isoformat(),
             "runs": 0,
         }
 
@@ -195,7 +195,7 @@ class CronTool(AgentTool):
         # Update run count
         if job_id in self._jobs:
             self._jobs[job_id]["runs"] += 1
-            self._jobs[job_id]["last_run"] = datetime.utcnow().isoformat()
+            self._jobs[job_id]["last_run"] = datetime.now(UTC).isoformat()
 
         # TODO: Integrate with session manager to send notifications
         # For now, just log

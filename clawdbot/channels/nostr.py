@@ -1,7 +1,7 @@
 """Nostr channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -54,7 +54,7 @@ class NostrChannel(ChannelPlugin):
             raise RuntimeError("Nostr channel not started")
 
         logger.info("Nostr send note")
-        return f"nostr-note-{datetime.utcnow().timestamp()}"
+        return f"nostr-note-{datetime.now(UTC).timestamp()}"
 
     async def send_media(
         self, target: str, media_url: str, media_type: str, caption: str | None = None

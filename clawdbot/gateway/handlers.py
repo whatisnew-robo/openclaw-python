@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -143,8 +143,8 @@ async def handle_agent(connection: Any, params: dict[str, Any]) -> dict[str, Any
     tools = _tool_registry.list_tools()
 
     # Create run ID
-    run_id = f"run-{int(datetime.utcnow().timestamp() * 1000)}"
-    accepted_at = datetime.utcnow().isoformat() + "Z"
+    run_id = f"run-{int(datetime.now(UTC).timestamp() * 1000)}"
+    accepted_at = datetime.now(UTC).isoformat() + "Z"
 
     # Execute agent turn in background
     asyncio.create_task(_run_agent_turn(connection, run_id, session, message, tools, model))
@@ -182,7 +182,7 @@ async def handle_chat_send(connection: Any, params: dict[str, Any]) -> dict[str,
     session = _session_manager.get_session(session_id)
     session.add_user_message(text)
 
-    message_id = f"msg-{int(datetime.utcnow().timestamp() * 1000)}"
+    message_id = f"msg-{int(datetime.now(UTC).timestamp() * 1000)}"
 
     return {"messageId": message_id}
 

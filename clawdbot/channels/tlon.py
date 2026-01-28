@@ -1,7 +1,7 @@
 """Tlon/Urbit channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -52,7 +52,7 @@ class TlonChannel(ChannelPlugin):
             raise RuntimeError("Tlon channel not started")
 
         logger.info(f"Tlon send to {target}")
-        return f"tlon-msg-{datetime.utcnow().timestamp()}"
+        return f"tlon-msg-{datetime.now(UTC).timestamp()}"
 
     async def send_media(
         self, target: str, media_url: str, media_type: str, caption: str | None = None

@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +208,7 @@ class MetricsCollector:
         self._gauges: dict[str, Gauge] = {}
         self._histograms: dict[str, Histogram] = {}
         self._lock = threading.Lock()
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(UTC)
 
     def counter(
         self, name: str, description: str = "", labels: dict[str, str] | None = None
@@ -267,8 +267,8 @@ class MetricsCollector:
     def to_dict(self) -> dict:
         """Convert all metrics to dictionary"""
         return {
-            "timestamp": datetime.utcnow().isoformat(),
-            "uptime_seconds": (datetime.utcnow() - self._start_time).total_seconds(),
+            "timestamp": datetime.now(UTC).isoformat(),
+            "uptime_seconds": (datetime.now(UTC) - self._start_time).total_seconds(),
             "counters": {k: v.to_dict() for k, v in self._counters.items()},
             "gauges": {k: v.to_dict() for k, v in self._gauges.items()},
             "histograms": {k: v.to_dict() for k, v in self._histograms.items()},

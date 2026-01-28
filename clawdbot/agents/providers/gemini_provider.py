@@ -1,5 +1,5 @@
 """
-Google Gemini provider implementation
+Google Gemini provider implementation using google.genai SDK
 """
 
 import logging
@@ -7,7 +7,19 @@ import os
 from collections.abc import AsyncIterator
 from typing import Any
 
-import google.generativeai as genai
+try:
+    from google import genai
+
+    GENAI_AVAILABLE = True
+except ImportError:
+    try:
+        # Fallback to old package
+        import google.generativeai as genai  # type: ignore
+
+        GENAI_AVAILABLE = False
+    except ImportError:
+        genai = None  # type: ignore
+        GENAI_AVAILABLE = False
 
 from .base import LLMMessage, LLMProvider, LLMResponse
 
@@ -42,8 +54,22 @@ class GeminiProvider(LLMProvider):
             if not api_key:
                 raise ValueError("GOOGLE_API_KEY not provided")
 
-            genai.configure(api_key=api_key)
-            self._client = genai.GenerativeModel(self.model)
+            if genai is None:
+                raise ImportError(
+                    "google-genai package not installed. Install with: pip install google-genai"
+                )
+
+            if GENAI_AVAILABLE:
+                # New google.genai package
+                self._client = genai.Client(api_key=api_key)
+            else:
+                # Legacy google.generativeai package (deprecated)
+                logger.warning(
+                    "Using deprecated google.generativeai package. "
+                    "Please upgrade to google-genai: pip install google-genai"
+                )
+                genai.configure(api_key=api_key)
+                self._client = genai.GenerativeModel(self.model)
 
         return self._client
 
@@ -101,51 +127,94 @@ class GeminiProvider(LLMProvider):
         gemini_messages = self._convert_messages(messages)
 
         # Extract system message if present
+        system_instruction = None
         system_msgs = [m for m in messages if m.role == "system"]
         if system_msgs:
-            system_msgs[0].content
+            system_instruction = system_msgs[0].content
 
         # Format tools
         self._format_tools_for_gemini(tools)
 
         try:
-            # Create generation config
-            generation_config = {
-                "max_output_tokens": max_tokens,
-                "temperature": kwargs.get("temperature", 0.7),
-            }
+            if GENAI_AVAILABLE and hasattr(client, "models"):
+                # New google.genai API
+                config = {
+                    "max_output_tokens": max_tokens,
+                    "temperature": kwargs.get("temperature", 0.7),
+                }
 
-            # Start chat
-            chat = client.start_chat(
-                history=gemini_messages[:-1] if len(gemini_messages) > 1 else []
-            )
+                # Prepare contents
+                contents = [{"role": msg["role"], "parts": msg["parts"]} for msg in gemini_messages]
 
-            # Send message and stream response
-            last_message = gemini_messages[-1]["parts"][0]["text"] if gemini_messages else ""
+                # Generate with streaming
+                response_stream = client.models.generate_content_stream(
+                    model=self.model,
+                    contents=contents,
+                    config=config,
+                    system_instruction=system_instruction,
+                )
 
-            response_stream = await chat.send_message_async(
-                last_message, generation_config=generation_config, stream=True
-            )
+                # Stream chunks
+                async for chunk in response_stream:
+                    if hasattr(chunk, "text") and chunk.text:
+                        yield LLMResponse(type="text_delta", content=chunk.text)
 
-            # Stream chunks
-            async for chunk in response_stream:
-                if chunk.text:
-                    yield LLMResponse(type="text_delta", content=chunk.text)
+                    # Handle function calls
+                    if hasattr(chunk, "function_calls") and chunk.function_calls:
+                        for func_call in chunk.function_calls:
+                            yield LLMResponse(
+                                type="tool_call",
+                                content=None,
+                                tool_calls=[
+                                    {
+                                        "id": f"call_{func_call.name}",
+                                        "name": func_call.name,
+                                        "arguments": (
+                                            dict(func_call.args)
+                                            if hasattr(func_call, "args")
+                                            else {}
+                                        ),
+                                    }
+                                ],
+                            )
+            else:
+                # Legacy google.generativeai API
+                generation_config = {
+                    "max_output_tokens": max_tokens,
+                    "temperature": kwargs.get("temperature", 0.7),
+                }
 
-                # Handle function calls
-                if hasattr(chunk, "function_call") and chunk.function_call:
-                    func_call = chunk.function_call
-                    yield LLMResponse(
-                        type="tool_call",
-                        content=None,
-                        tool_calls=[
-                            {
-                                "id": f"call_{func_call.name}",
-                                "name": func_call.name,
-                                "arguments": dict(func_call.args),
-                            }
-                        ],
-                    )
+                # Start chat
+                chat = client.start_chat(
+                    history=gemini_messages[:-1] if len(gemini_messages) > 1 else []
+                )
+
+                # Send message and stream response
+                last_message = gemini_messages[-1]["parts"][0]["text"] if gemini_messages else ""
+
+                response_stream = await chat.send_message_async(
+                    last_message, generation_config=generation_config, stream=True
+                )
+
+                # Stream chunks
+                async for chunk in response_stream:
+                    if chunk.text:
+                        yield LLMResponse(type="text_delta", content=chunk.text)
+
+                    # Handle function calls
+                    if hasattr(chunk, "function_call") and chunk.function_call:
+                        func_call = chunk.function_call
+                        yield LLMResponse(
+                            type="tool_call",
+                            content=None,
+                            tool_calls=[
+                                {
+                                    "id": f"call_{func_call.name}",
+                                    "name": func_call.name,
+                                    "arguments": dict(func_call.args),
+                                }
+                            ],
+                        )
 
             # Final response
             yield LLMResponse(type="done", content=None, finish_reason="stop")

@@ -1,7 +1,7 @@
 """Zalo channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -52,7 +52,7 @@ class ZaloChannel(ChannelPlugin):
             raise RuntimeError("Zalo channel not started")
 
         logger.info(f"Zalo send to {target}")
-        return f"zalo-msg-{datetime.utcnow().timestamp()}"
+        return f"zalo-msg-{datetime.now(UTC).timestamp()}"
 
     async def send_media(
         self, target: str, media_url: str, media_type: str, caption: str | None = None
@@ -62,4 +62,4 @@ class ZaloChannel(ChannelPlugin):
             raise RuntimeError("Zalo channel not started")
 
         logger.info(f"Zalo media to {target}")
-        return f"zalo-media-{datetime.utcnow().timestamp()}"
+        return f"zalo-media-{datetime.now(UTC).timestamp()}"

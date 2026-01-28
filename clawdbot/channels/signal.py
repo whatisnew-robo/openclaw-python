@@ -1,7 +1,7 @@
 """Signal channel implementation"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -80,7 +80,7 @@ class SignalChannel(ChannelPlugin):
 
         # TODO: Implement actual Signal message sending via signal-cli
         logger.warning(f"Signal send_text not implemented: {target}")
-        return f"signal-msg-{datetime.utcnow().timestamp()}"
+        return f"signal-msg-{datetime.now(UTC).timestamp()}"
 
     async def send_media(
         self, target: str, media_url: str, media_type: str, caption: str | None = None
@@ -91,7 +91,7 @@ class SignalChannel(ChannelPlugin):
 
         # TODO: Implement Signal media sending
         logger.warning(f"Signal send_media not implemented: {target}")
-        return f"signal-media-{datetime.utcnow().timestamp()}"
+        return f"signal-media-{datetime.now(UTC).timestamp()}"
 
 
 # Note: Full Signal implementation requires:

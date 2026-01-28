@@ -1,7 +1,7 @@
 """WebChat channel (Gateway WebSocket)"""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin, InboundMessage
@@ -46,11 +46,11 @@ class WebChatChannel(ChannelPlugin):
                     "channel": self.id,
                     "target": target,
                     "text": text,
-                    "messageId": f"webchat-{datetime.utcnow().timestamp()}",
+                    "messageId": f"webchat-{datetime.now(UTC).timestamp()}",
                 },
             )
 
-        return f"webchat-{datetime.utcnow().timestamp()}"
+        return f"webchat-{datetime.now(UTC).timestamp()}"
 
     def set_gateway_server(self, server: Any) -> None:
         """Set reference to Gateway server"""
@@ -62,13 +62,13 @@ class WebChatChannel(ChannelPlugin):
         """Handle WebChat message from Gateway"""
         inbound = InboundMessage(
             channel_id=self.id,
-            message_id=f"webchat-{datetime.utcnow().timestamp()}",
+            message_id=f"webchat-{datetime.now(UTC).timestamp()}",
             sender_id=sender_id,
             sender_name="WebChat User",
             chat_id=session_key,
             chat_type="direct",
             text=text,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             metadata={"session_key": session_key},
         )
 

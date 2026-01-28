@@ -3,7 +3,7 @@
 import logging
 import platform
 import subprocess
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from .base import ChannelCapabilities, ChannelPlugin
@@ -86,7 +86,7 @@ class iMessageChannel(ChannelPlugin):
             )
 
             if result.returncode == 0:
-                message_id = f"imsg-{int(datetime.utcnow().timestamp()*1000)}"
+                message_id = f"imsg-{int(datetime.now(UTC).timestamp()*1000)}"
                 logger.info(f"Sent iMessage to {target}")
                 return message_id
             else:

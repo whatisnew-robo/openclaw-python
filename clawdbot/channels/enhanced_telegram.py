@@ -4,7 +4,7 @@ Enhanced Telegram channel with connection management
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from telegram import Update
@@ -259,7 +259,7 @@ class EnhancedTelegramChannel(ChannelPlugin):
             chat_id=str(chat.id),
             chat_type=chat_type,
             text=message.text,
-            timestamp=message.date.isoformat() if message.date else datetime.utcnow().isoformat(),
+            timestamp=message.date.isoformat() if message.date else datetime.now(UTC).isoformat(),
             reply_to=str(message.reply_to_message.message_id) if message.reply_to_message else None,
             metadata={
                 "username": sender.username,

@@ -4,7 +4,7 @@ Auth profile rotation with cooldown management
 
 import logging
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from .profile import AuthProfile, ProfileStore
 
@@ -97,7 +97,7 @@ class RotationManager:
         """
         profile = self.store.get_profile(profile_id)
         if profile:
-            profile.last_used = datetime.utcnow()
+            profile.last_used = datetime.now(timezone.utc)
             profile.failure_count = 0
             profile.cooldown_until = None
             self.store.add_profile(profile)
@@ -128,7 +128,7 @@ class RotationManager:
             if is_rate_limit:
                 cooldown_minutes *= 2
 
-            profile.cooldown_until = datetime.utcnow() + timedelta(minutes=cooldown_minutes)
+            profile.cooldown_until = datetime.now(timezone.utc) + timedelta(minutes=cooldown_minutes)
 
             logger.warning(
                 f"Profile {profile_id} in cooldown until {profile.cooldown_until} "
