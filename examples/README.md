@@ -1,246 +1,147 @@
 # ClawdBot Examples
 
-完整的使用示例，展示ClawdBot的各种功能。
+Complete examples demonstrating ClawdBot features.
 
----
-
-## 📋 示例列表
-
-### 1. 基础Agent使用 (`01_basic_agent.py`)
-
-**学习内容**:
-- 创建AgentRuntime
-- 创建Session
-- 发送消息并处理响应
-- 上下文管理
-
-**运行**:
-```bash
-# 设置API密钥
-export ANTHROPIC_API_KEY='your-key'
-# 或
-export OPENAI_API_KEY='your-key'
-
-python examples/01_basic_agent.py
-```
-
----
-
-### 2. 使用工具 (`02_with_tools.py`)
-
-**学习内容**:
-- 加载和配置工具
-- 设置工具权限
-- 处理工具调用
-- 查看工具指标
-
-**运行**:
-```bash
-python examples/02_with_tools.py
-```
-
----
-
-### 3. 监控和健康检查 (`03_monitoring.py`)
-
-**学习内容**:
-- 设置健康检查
-- 收集指标
-- 导出Prometheus格式
-- 使用Timer
-
-**运行**:
-```bash
-python examples/03_monitoring.py
-```
-
-**输出示例**:
-```
-📊 Metrics:
-
-Counters:
-  agent_requests: 3.0
-
-Histograms:
-  agent_request_time:
-    Count: 3
-    Avg: 1.234s
-    P95: 1.456s
-```
-
----
-
-### 4. REST API服务器 (`04_api_server.py`)
-
-**学习内容**:
-- 启动FastAPI服务器
-- 使用健康检查端点
-- 使用Agent Chat API
-- 查看指标
-
-**运行**:
-```bash
-python examples/04_api_server.py
-```
-
-**API测试**:
-```bash
-# 健康检查
-curl http://localhost:8000/health
-
-# 查看文档
-open http://localhost:8000/docs
-
-# Chat
-curl -X POST http://localhost:8000/agent/chat \
-  -H "X-API-Key: test" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_id": "demo",
-    "message": "Hello!",
-    "model": "anthropic/claude-opus-4"
-  }'
-
-# 获取指标
-curl http://localhost:8000/metrics
-```
-
----
-
-### 5. Telegram机器人 (`05_telegram_bot.py`)
-
-**学习内容**:
-- 设置Telegram channel
-- 连接Agent到Telegram
-- 处理消息
-- 自动重连
-
-**准备工作**:
-1. 在Telegram搜索 @BotFather
-2. 发送 `/newbot` 创建机器人
-3. 获取bot token
-4. 设置环境变量
-
-**运行**:
-```bash
-export TELEGRAM_BOT_TOKEN='your-bot-token'
-export ANTHROPIC_API_KEY='your-key'
-
-python examples/05_telegram_bot.py
-```
-
-然后在Telegram给你的机器人发消息！
-
----
-
-## 🚀 快速开始
-
-### 安装依赖
+## Prerequisites
 
 ```bash
-# 基础依赖
+# Install dependencies
 poetry install
 
-# 开发依赖（用于测试）
-poetry install --with dev
+# Set API key
+export ANTHROPIC_API_KEY='your-key-here'
+# or
+export OPENAI_API_KEY='your-key-here'
 ```
 
-### 设置API密钥
+## Examples
+
+### 1. Basic Agent (`01_basic_agent.py`)
+
+Learn how to:
+- Create an AgentRuntime
+- Create a Session
+- Send messages and process responses
 
 ```bash
-# Anthropic (推荐)
-export ANTHROPIC_API_KEY='sk-ant-...'
-
-# 或 OpenAI
-export OPENAI_API_KEY='sk-...'
+poetry run python examples/01_basic_agent.py
 ```
 
-### 运行第一个示例
+### 2. Agent with Tools (`02_with_tools.py`)
+
+Learn how to:
+- Load and configure tools
+- Set tool permissions
+- Handle tool calls
+- View metrics
 
 ```bash
-python examples/01_basic_agent.py
+poetry run python examples/02_with_tools.py
 ```
 
----
+### 3. Monitoring (`03_monitoring.py`)
 
-## 📖 更多资源
+Learn how to:
+- Setup health checks
+- Collect metrics
+- Export to Prometheus format
 
-### 文档
-- [CURRENT_STATUS.md](../CURRENT_STATUS.md) - 项目当前状态
-- [AGENT_IMPLEMENTATION.md](../AGENT_IMPLEMENTATION.md) - Agent架构说明
-- [API文档](http://localhost:8000/docs) - 运行示例4后访问
-
-### 测试
 ```bash
-# 运行所有测试
-pytest
-
-# 运行特定测试
-pytest tests/test_runtime.py -v
-
-# 查看覆盖率
-pytest --cov=clawdbot --cov-report=html
-open htmlcov/index.html
+poetry run python examples/03_monitoring.py
 ```
 
----
+### 4. API Server (`04_api_server.py`)
 
-## 💡 常见问题
+Learn how to:
+- Start REST API server
+- Use health endpoints
+- Use agent chat API
 
-### Q: 示例运行失败，显示API密钥错误？
-
-**A**: 确保设置了正确的环境变量：
 ```bash
-# 检查是否设置
-echo $ANTHROPIC_API_KEY
-echo $OPENAI_API_KEY
+poetry run python examples/04_api_server.py
 
-# 如果为空，设置一个
-export ANTHROPIC_API_KEY='your-key'
+# Then in another terminal:
+curl http://localhost:8000/health
+curl http://localhost:8000/docs
 ```
 
-### Q: Telegram bot示例无法连接？
+### 5. Telegram Bot (`05_telegram_bot.py`)
 
-**A**: 
-1. 确认bot token正确
-2. 检查网络连接
-3. 查看日志输出
-4. 确保没有防火墙阻止
+Learn how to:
+- Setup Telegram channel
+- Connect agent to Telegram
+- Handle automatic reconnection
 
-### Q: 如何切换模型？
+```bash
+export TELEGRAM_BOT_TOKEN='your-bot-token'
+poetry run python examples/05_telegram_bot.py
+```
 
-**A**: 在创建AgentRuntime时指定：
+## Quick Reference
+
+### Creating an Agent
+
 ```python
-# 使用Claude
-runtime = AgentRuntime(model="anthropic/claude-opus-4")
+from clawdbot.agents.runtime import AgentRuntime
+from clawdbot.agents.session import Session
 
-# 使用GPT-4
-runtime = AgentRuntime(model="openai/gpt-4o")
+runtime = AgentRuntime(model="anthropic/claude-sonnet-4-20250514")
+session = Session("my-session", Path("./workspace"))
+
+async for event in runtime.run_turn(session, "Hello!"):
+    if event.type == "assistant":
+        print(event.data.get("delta", {}).get("text", ""))
 ```
 
-### Q: 如何调整超时时间？
+### Using Tools
 
-**A**: 配置工具或runtime：
 ```python
-from clawdbot.agents.tools.base import ToolConfig
+from clawdbot.agents.tools.bash import BashTool
+from clawdbot.agents.tools.base import ToolConfig, ToolPermission
 
+tool = BashTool()
 tool.configure(ToolConfig(
-    timeout_seconds=60.0,  # 60秒超时
-    max_output_size=200000
+    timeout_seconds=30.0,
+    allowed_permissions={ToolPermission.EXECUTE}
 ))
+
+async for event in runtime.run_turn(session, "List files", tools=[tool]):
+    ...
 ```
 
----
+### Starting API Server
 
-## 🎯 下一步
+```python
+from clawdbot.api import run_api_server
 
-学完这些示例后，你可以：
+await run_api_server(host="0.0.0.0", port=8000)
+```
 
-1. **创建自己的工具** - 继承 `AgentTool` 类
-2. **添加新的channel** - 继承 `ChannelPlugin` 类
-3. **集成到你的应用** - 使用REST API
-4. **部署到生产** - 使用Docker (见 `DOCKER_QUICKSTART.md`)
+## Troubleshooting
 
----
+### API Key Error
 
-**Happy Coding!** 🚀
+Make sure your API key is set:
+```bash
+echo $ANTHROPIC_API_KEY  # Should not be empty
+```
+
+### Import Error
+
+Make sure you're in the project directory and dependencies are installed:
+```bash
+cd clawdbot-python
+poetry install
+```
+
+### Telegram Bot Not Connecting
+
+1. Verify bot token is correct
+2. Check network connectivity
+3. Look at log output for errors
+
+## More Information
+
+- [Main README](../README.md)
+- [API Documentation](http://localhost:8000/docs) (when server running)
+- [Contributing](../CONTRIBUTING.md)

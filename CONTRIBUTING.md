@@ -2,26 +2,30 @@
 
 Thank you for your interest in contributing to ClawdBot Python!
 
-## Development Setup
+## Development Status
+
+> **Note**: This project is under active development. APIs may change frequently.
+
+## Getting Started
 
 ### Prerequisites
 
 - Python 3.11+
-- Poetry or pip
+- Poetry
 - Git
 
 ### Setup
 
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/clawdbot-python.git
+# Clone the repository
+git clone https://github.com/zhaoyuong/clawdbot-python.git
 cd clawdbot-python
 
-# Install dependencies
+# Install dependencies (including dev dependencies)
 poetry install --with dev
 
-# Or with pip
-pip install -e ".[dev]"
+# Run tests to verify setup
+poetry run pytest
 ```
 
 ## Development Workflow
@@ -34,144 +38,100 @@ git checkout -b feature/your-feature-name
 
 ### 2. Make Changes
 
-Follow the project structure:
-- Tools: `clawdbot/agents/tools/`
-- Channels: `clawdbot/channels/`
-- Skills: `skills/`
-- Extensions: `extensions/`
+- Follow the existing code style
+- Add tests for new functionality
+- Update documentation if needed
 
-### 3. Code Style
+### 3. Run Tests
+
+```bash
+# Run all tests
+poetry run pytest
+
+# Run with coverage
+poetry run pytest --cov=clawdbot
+
+# Run specific tests
+poetry run pytest tests/test_runtime.py -v
+```
+
+### 4. Code Quality
 
 ```bash
 # Format code
-black clawdbot/
-isort clawdbot/
+poetry run black clawdbot/ tests/
 
 # Lint
-ruff check clawdbot/
-mypy clawdbot/
+poetry run ruff check clawdbot/ tests/
+
+# Type check
+poetry run mypy clawdbot/
 ```
 
-### 4. Add Tests
-
-```bash
-# Add tests to tests/
-# Run tests
-pytest
-```
-
-### 5. Update Documentation
-
-- Update relevant README sections
-- Add docstrings
-- Update CHANGELOG.md
-
-### 6. Submit PR
+### 5. Commit Changes
 
 ```bash
 git add .
-git commit -m "Add feature: your feature"
-git push origin feature/your-feature-name
+git commit -m "feat: description of your changes"
 ```
 
-## Contributing Guidelines
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation
+- `test:` - Tests
+- `refactor:` - Code refactoring
 
-### Code Quality
+### 6. Submit Pull Request
 
-- Use type hints
-- Add docstrings
-- Handle errors gracefully
-- Log appropriately
+Push your branch and create a pull request on GitHub.
 
-### Testing
+## Code Style
 
-- Add unit tests for new features
-- Ensure existing tests pass
-- Test edge cases
+- Use [Black](https://black.readthedocs.io/) for formatting
+- Use [Ruff](https://docs.astral.sh/ruff/) for linting
+- Use type hints wherever possible
+- Write docstrings for public functions and classes
 
-### Documentation
+## Testing
 
-- Update README for user-facing changes
-- Add inline comments for complex code
-- Update CHANGELOG.md
-
-## Adding New Components
-
-### Adding a Tool
-
-1. Create file in `clawdbot/agents/tools/`
-2. Inherit from `AgentTool`
-3. Implement `get_schema()` and `execute()`
-4. Register in `registry.py`
-5. Add tests
-
-Example:
-
-```python
-from .base import AgentTool, ToolResult
-
-class MyTool(AgentTool):
-    def __init__(self):
-        super().__init__()
-        self.name = "my_tool"
-        self.description = "Tool description"
-    
-    def get_schema(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "param": {"type": "string"}
-            }
-        }
-    
-    async def execute(self, params: dict) -> ToolResult:
-        # Implementation
-        return ToolResult(success=True, content="Result")
-```
-
-### Adding a Channel
-
-1. Create file in `clawdbot/channels/`
-2. Inherit from `ChannelPlugin`
-3. Implement required methods
-4. Create extension in `extensions/`
-5. Add configuration schema
-
-### Adding a Skill
-
-1. Create directory in `skills/`
-2. Create `SKILL.md` with frontmatter
-3. Document usage and tools
-4. Add examples
+- Write tests for all new features
+- Maintain or improve test coverage
+- Use pytest fixtures for common setup
+- Use async tests for async code
 
 ## Project Structure
 
 ```
-clawdbot-python/
-├── clawdbot/          # Core package
-│   ├── agents/        # Agent runtime and tools
-│   ├── channels/      # Channel plugins
-│   ├── cli/           # CLI commands
-│   ├── config/        # Configuration
-│   ├── gateway/       # Gateway server
-│   ├── plugins/       # Plugin system
-│   ├── skills/        # Skills loader
-│   └── web/           # Web UI
-├── extensions/        # Extension plugins
-├── skills/            # Skill definitions
-├── tests/             # Test files
-└── docs/              # Documentation
+clawdbot/
+├── agents/        # Agent runtime and tools
+├── api/           # REST API
+├── channels/      # Channel plugins
+├── config/        # Configuration
+├── gateway/       # WebSocket gateway
+└── monitoring/    # Health and metrics
 ```
 
-## Getting Help
+## Areas for Contribution
 
-- GitHub Issues: Report bugs and request features
-- GitHub Discussions: Ask questions
-- Documentation: Check docs/ folder
+### High Priority
+- Improving test coverage
+- Bug fixes
+- Documentation improvements
+- Channel plugin testing
 
-## Code of Conduct
+### Medium Priority
+- New tools
+- Performance improvements
+- Error handling improvements
 
-Be respectful, inclusive, and constructive.
+### Low Priority
+- New channel plugins
+- New skills
+
+## Questions?
+
+If you have questions, please open an issue on GitHub.
 
 ## License
 

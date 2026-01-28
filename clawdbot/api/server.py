@@ -15,6 +15,7 @@ from ..monitoring import get_health_check, get_metrics
 from ..agents.runtime import AgentRuntime
 from ..agents.session import SessionManager
 from ..channels.registry import ChannelRegistry
+from .openai_compat import router as openai_router, set_runtime as set_openai_runtime, set_session_manager as set_openai_session_manager
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,14 @@ def set_channel_registry(registry: ChannelRegistry) -> None:
     """Set global channel registry"""
     global _channel_registry
     _channel_registry = registry
+
+
+def _init_openai_compat() -> None:
+    """Initialize OpenAI-compatible API"""
+    if _runtime:
+        set_openai_runtime(_runtime)
+    if _session_manager:
+        set_openai_session_manager(_session_manager)
 
 
 # Request/Response models
@@ -112,6 +121,9 @@ async def lifespan(app: FastAPI):
             return len(channels) > 0  # At least one channel registered
         health.register("channels", channels_check, critical=False)
     
+    # Initialize OpenAI-compatible API
+    _init_openai_compat()
+    
     yield
     
     logger.info("Shutting down API server...")
@@ -134,6 +146,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    
+    # Add OpenAI-compatible router
+    app.include_router(openai_router)
     
     # Health check endpoints
     @app.get("/health", tags=["Health"])
