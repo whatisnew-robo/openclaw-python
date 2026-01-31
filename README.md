@@ -10,7 +10,7 @@ OpenClaw is a production-ready AI assistant that works across **all your communi
 
 ---
 
-## ⭐ What Makes OpenClaw Different
+## ⭐ What Makes OpenClaw PYTHON Different
 
 **Multi-Channel First**: Connect to your AI through **any messaging platform** you already use:
 - 📱 **Telegram** - Chat on mobile or desktop
