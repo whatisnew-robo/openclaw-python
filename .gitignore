@@ -92,22 +92,7 @@ dmypy.json
 workspace/
 .openclaw/
 
-# Documentation - only keep essential docs
-# Keep: README.md, RELEASE_NOTES, core guides
-# Ignore: archive, development docs, detailed guides
-docs/archive/
-docs/development/
-docs/guides/ADVANCED_FEATURES_PLAN.md
-docs/guides/MIGRATION_GUIDE.md
-docs/guides/PRODUCTION_READY.md
-docs/guides/PROJECT_COMPLETION_REPORT.md
-docs/guides/PROJECT_STATUS.md
-docs/guides/RENAME_SUMMARY.md
-docs/testing/TELEGRAM_TEST_SUMMARY.md
-
-# Keep only these essential docs in repo:
-# - docs/README.md
-# - docs/RELEASE_NOTES_*.md
-# - docs/guides/QUICKSTART.md
-# - docs/guides/ADVANCED_FEATURES.md
-# - docs/setup/GEMINI_SETUP_GUIDE.md
+# Documentation
+# All docs/ content is for local development only
+# GitHub should only show README.md, QUICK_START.md, START_HERE.md
+docs/
