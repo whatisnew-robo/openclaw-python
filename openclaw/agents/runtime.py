@@ -7,6 +7,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
+from ..events import Event, EventType
 from .auth import AuthProfile, ProfileStore, RotationManager
 from .compaction import CompactionManager, CompactionStrategy, TokenAnalyzer
 from .context import ContextManager
@@ -29,13 +30,8 @@ from .tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
 
-
-class AgentEvent:
-    """Event emitted during agent execution"""
-
-    def __init__(self, event_type: str, data: Any):
-        self.type = event_type
-        self.data = data
+# Backwards compatibility: AgentEvent is now an alias to Event
+AgentEvent = Event
 
 
 class MultiProviderRuntime:
@@ -188,7 +184,7 @@ class MultiProviderRuntime:
             self.event_listeners.remove(listener)
             logger.debug(f"Removed event listener: {listener}")
 
-    async def _notify_observers(self, event: AgentEvent):
+    async def _notify_observers(self, event: Event):
         """Notify all registered observers of an event"""
         for listener in self.event_listeners:
             try:
@@ -330,7 +326,12 @@ class MultiProviderRuntime:
                 await self._notify_observers(event)
                 yield event
 
-        event = AgentEvent("lifecycle", {"phase": "start"})
+        event = Event(
+            type=EventType.AGENT_STARTED,
+            source="agent-runtime",
+            session_id=session.session_id if session else None,
+            data={"phase": "start"}
+        )
         await self._notify_observers(event)
         yield event
 
@@ -396,16 +397,21 @@ class MultiProviderRuntime:
 
                             # Stream content (non-thinking text)
                             if content_delta:
-                                event = AgentEvent(
-                                    "assistant",
-                                    {"delta": {"type": "text_delta", "text": content_delta}},
+                                event = Event(
+                                    type=EventType.AGENT_TEXT,
+                                    source="agent-runtime",
+                                    session_id=session.session_id if session else None,
+                                    data={"delta": {"type": "text_delta", "text": content_delta}}
                                 )
                                 await self._notify_observers(event)
                                 yield event
                         else:
                             # No thinking extraction, stream as-is
-                            event = AgentEvent(
-                                "assistant", {"delta": {"type": "text_delta", "text": text}}
+                            event = Event(
+                                type=EventType.AGENT_TEXT,
+                                source="agent-runtime",
+                                session_id=session.session_id if session else None,
+                                data={"delta": {"type": "text_delta", "text": text}}
                             )
                             await self._notify_observers(event)
                             yield event
@@ -514,7 +520,12 @@ class MultiProviderRuntime:
                         raise Exception(response.content)
 
                 # Success, exit retry loop
-                event = AgentEvent("lifecycle", {"phase": "end"})
+                event = Event(
+                    type=EventType.AGENT_TURN_COMPLETE,
+                    source="agent-runtime",
+                    session_id=session.session_id if session else None,
+                    data={"phase": "end"}
+                )
                 await self._notify_observers(event)
                 yield event
                 return

@@ -31,6 +31,7 @@ import websockets
 from websockets.server import WebSocketServerProtocol
 
 from ..config import ClawdbotConfig
+from ..events import Event, EventType
 from .handlers import get_method_handler
 from .protocol import ErrorShape, EventFrame, RequestFrame, ResponseFrame
 from .protocol.frames import ConnectRequest, HelloResponse
@@ -247,19 +248,18 @@ class GatewayServer:
             "data": data,
         })
     
-    async def on_agent_event(self, event):
+    async def on_agent_event(self, event: Event):
         """
         Observer callback: Agent Runtime automatically calls this for every event
         
         This implements the Observer Pattern where Gateway passively receives
         events instead of channels actively pushing to Gateway.
+        
+        Args:
+            event: Unified Event from Agent Runtime
         """
-        # Broadcast to all WebSocket clients
-        event_data = {
-            "type": getattr(event, "type", "unknown"),
-            "data": getattr(event, "data", {})
-        }
-        await self.broadcast_event("agent", event_data)
+        # Broadcast to all WebSocket clients using standardized format
+        await self.broadcast_event("agent", event.to_dict())
 
     async def handle_connection(self, websocket: WebSocketServerProtocol) -> None:
         """Handle new WebSocket connection"""

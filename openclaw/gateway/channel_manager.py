@@ -23,6 +23,7 @@ from typing import Any, Callable, Awaitable
 
 from ..channels.base import ChannelPlugin, InboundMessage, MessageHandler
 from ..agents.runtime import AgentRuntime
+from ..events import Event, EventType
 
 logger = logging.getLogger(__name__)
 
@@ -539,14 +540,44 @@ class ChannelManager:
     
     async def _emit_event(
         self,
-        event_type: str,
+        event_type_str: str,
         channel_id: str,
         data: dict[str, Any],
     ) -> None:
-        """Emit channel event to all listeners"""
+        """
+        Emit channel event to all listeners using unified Event system
+        
+        Args:
+            event_type_str: String event type (e.g., "registered", "started")
+            channel_id: Channel ID
+            data: Event data
+        """
+        # Map string event type to EventType enum
+        event_type_map = {
+            "registered": EventType.CHANNEL_REGISTERED,
+            "unregistered": EventType.CHANNEL_UNREGISTERED,
+            "starting": EventType.CHANNEL_STARTING,
+            "started": EventType.CHANNEL_STARTED,
+            "ready": EventType.CHANNEL_READY,
+            "stopping": EventType.CHANNEL_STOPPING,
+            "stopped": EventType.CHANNEL_STOPPED,
+            "error": EventType.CHANNEL_ERROR,
+        }
+        
+        event_type = event_type_map.get(event_type_str, EventType.CHANNEL_ERROR)
+        
+        # Create unified Event
+        event = Event(
+            type=event_type,
+            source=f"channel-manager",
+            channel_id=channel_id,
+            data=data
+        )
+        
+        # Notify legacy listeners (for backward compatibility)
         for listener in self._event_listeners:
             try:
-                await listener(event_type, channel_id, data)
+                await listener(event_type_str, channel_id, data)
             except Exception as e:
                 logger.error(f"Event listener error: {e}")
     
