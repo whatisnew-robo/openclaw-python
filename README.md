@@ -1,8 +1,10 @@
 # OpenClaw Python
 
-> 🦞 **Personal AI Assistant Platform - Connect via Any Channel**
+> 🦞 **Python implementation of [OpenClaw](https://github.com/openclaw/openclaw) - Personal AI Assistant Platform**
 
-OpenClaw is a production-ready AI assistant that works across **all your communication channels** - Telegram, Discord, Slack, WhatsApp, and more. Talk to your AI anywhere, anytime.
+A production-ready Python port that works across **all your communication channels** - Telegram, Discord, Slack, WhatsApp, and more. Talk to your AI anywhere, anytime.
+
+**Note**: This is a community Python implementation. The official OpenClaw project is written in TypeScript at [openclaw/openclaw](https://github.com/openclaw/openclaw).
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -10,7 +12,7 @@ OpenClaw is a production-ready AI assistant that works across **all your communi
 
 ---
 
-## ⭐ What Makes OpenClaw PYTHON Different
+## ⭐ Key Features
 
 **Multi-Channel First**: Connect to your AI through **any messaging platform** you already use:
 - 📱 **Telegram** - Chat on mobile or desktop
@@ -378,19 +380,22 @@ uv run pytest --cov=openclaw --cov-report=html
 
 ---
 
-## 🤝 Project History
+## 🤝 About This Project
 
-**OpenClaw** (formerly MoltBot, formerly ClawdBot) is the open-source personal AI assistant platform.
+This is a **community-maintained Python clone** of [OpenClaw](https://github.com/openclaw/openclaw).
 
-- **Main Project**: [openclaw/openclaw](https://github.com/openclaw/openclaw) (TypeScript)
-- **Python Port**: this repository
+- **Official Project**: [openclaw/openclaw](https://github.com/openclaw/openclaw) (TypeScript) - formerly MoltBot, formerly ClawdBot
+- **This Repository**: Independent Python implementation by [@zhaoyuong](https://github.com/zhaoyuong)
 
-This Python implementation provides:
-- ✅ Multi-channel support (Telegram, Discord, Slack, etc.)
-- ✅ Gateway protocol for device pairing
-- ✅ Better testing (45% vs ~10% in TypeScript)
-- ✅ Complete documentation
-- ✅ Enhanced security features
+### Why This Python Clone?
+
+This implementation focuses on:
+- ✅ **Python ecosystem** - Easy integration with Python ML/AI tools
+- ✅ **Multi-channel first** - Telegram, Discord, Slack, etc.
+- ✅ **Gateway protocol** - Device pairing support
+- ✅ **Better testing** - 45% coverage vs ~10% in TypeScript version
+- ✅ **Complete documentation** - Step-by-step guides for all features
+- ✅ **Enhanced security** - API key rotation, rate limiting
 
 ---
 
