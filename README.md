@@ -569,6 +569,7 @@ MIT License - see [LICENSE](LICENSE)
 
 - [OpenClaw](https://github.com/openclaw/openclaw) - Original TypeScript implementation
 - All contributors to the OpenClaw ecosystem
+- See [CONTRIBUTORS.md](CONTRIBUTORS.md) for full list of project contributors
 
 ---
 
