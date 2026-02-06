@@ -8,7 +8,8 @@ This modular approach matches the TypeScript implementation in src/agents/system
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -615,3 +616,45 @@ def build_reasoning_format_section(
         reasoning_hint,
         "",
     ]
+
+
+def build_skills_section(
+    workspace_dir: Path | None = None,
+    config: Any | None = None,
+    read_tool_name: str = "read_file"
+) -> list[str]:
+    """
+    Build the Skills section (matches TS skills integration).
+    
+    Args:
+        workspace_dir: Workspace directory
+        config: OpenClaw configuration
+        read_tool_name: Name of the read tool to reference
+    
+    Returns:
+        List of prompt lines for skills section
+    """
+    if not workspace_dir:
+        return []
+    
+    try:
+        from .skills import build_workspace_skills_prompt
+        
+        skills_prompt = build_workspace_skills_prompt(
+            workspace_dir=workspace_dir,
+            config=config,
+            read_tool_name=read_tool_name
+        )
+        
+        if skills_prompt:
+            # Already formatted with ## Available Skills header
+            return [skills_prompt, ""]
+        
+        return []
+    
+    except ImportError:
+        logger.warning("Skills module not available")
+        return []
+    except Exception as e:
+        logger.error(f"Failed to build skills section: {e}")
+        return []

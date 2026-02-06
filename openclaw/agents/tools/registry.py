@@ -17,6 +17,7 @@ from .channel_actions import (
 from .cron import CronTool
 from .file_ops import EditFileTool, ReadFileTool, WriteFileTool
 from .image import ImageTool
+from .memory import MemoryGetTool, MemorySearchTool
 from .nodes import NodesTool
 from .patch import ApplyPatchTool
 from .process import ProcessTool
@@ -33,11 +34,15 @@ class ToolRegistry:
         self,
         session_manager: Optional["SessionManager"] = None,
         channel_registry: Any | None = None,
+        workspace_dir: Any | None = None,
+        config: Any | None = None,
         auto_register: bool = True,
     ):
         self._tools: dict[str, AgentTool] = {}
         self._session_manager = session_manager
         self._channel_registry = channel_registry
+        self._workspace_dir = workspace_dir
+        self._config = config
         if auto_register:
             self._register_default_tools()
 
@@ -57,6 +62,13 @@ class ToolRegistry:
 
         # Image analysis
         self.register(ImageTool())
+        
+        # Memory search (if workspace available)
+        if self._workspace_dir:
+            from pathlib import Path
+            workspace_path = Path(self._workspace_dir) if isinstance(self._workspace_dir, str) else self._workspace_dir
+            self.register(MemorySearchTool(workspace_path, self._config))
+            self.register(MemoryGetTool(workspace_path, self._config))
 
         # Session management (only if session manager available)
         if self._session_manager:
