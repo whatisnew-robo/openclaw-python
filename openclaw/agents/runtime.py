@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Enhanced Agent runtime with multi-provider support
 """

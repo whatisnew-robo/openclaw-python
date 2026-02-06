@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Error handling and recovery for agent system
 """
