@@ -78,8 +78,9 @@ logs/
 tmp/
 temp/
 *.tmp
-test_*.py
-list_*.py
+# Exclude temporary test/list scripts in root, but keep tests/ directory
+/test_*.py
+/list_*.py
 
 # MyPy
 .mypy_cache/
@@ -97,3 +98,14 @@ workspace/
 # All docs/ content is for local development only
 # GitHub should only show README.md, QUICK_START.md, START_HERE.md
 docs/
+
+# Temporary analysis and implementation reports (keep locally, don't push)
+*_ANALYSIS.md
+*_IMPLEMENTATION.md
+*_SUMMARY.md
+REFACTOR_*.md
+AUTH_ID_*.md
+认证与*.md
+实现报告*.md
+分析报告*.md
+validate_*.py

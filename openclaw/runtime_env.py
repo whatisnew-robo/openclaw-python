@@ -165,11 +165,43 @@ class RuntimeEnv:
         if tools is None and self._tool_registry:
             tools = list(self._tool_registry.get_all())
 
-        # Add custom system message if provided
-        if self.system_message and session:
-            # This would require Session to support system messages
-            # For now, we'll just log it
-            logger.debug(f"System message for {session_id}: {self.system_message}")
+        # Build or use system prompt
+        system_prompt = self.custom_prompt or self.system_message
+        
+        # If no custom prompt, build a proper one using the new architecture
+        if not system_prompt:
+            try:
+                from .agents.system_prompt import build_agent_system_prompt
+                from .agents.system_prompt_bootstrap import load_bootstrap_files, format_bootstrap_context
+                from .agents.system_prompt_params import get_runtime_info
+                
+                # Build runtime info
+                runtime_info = get_runtime_info(
+                    agent_id=self.env_id,
+                    model=self.model,
+                    channel=None
+                )
+                
+                # Load bootstrap files
+                bootstrap_files = load_bootstrap_files(self.workspace)
+                context_files = format_bootstrap_context(bootstrap_files)
+                
+                # Get tool names
+                tool_names = [tool.name for tool in (tools or [])]
+                
+                # Build system prompt
+                system_prompt = build_agent_system_prompt(
+                    workspace_dir=self.workspace,
+                    tool_names=tool_names,
+                    prompt_mode="full",
+                    runtime_info=runtime_info,
+                    context_files=context_files,
+                )
+                
+                logger.debug(f"Built system prompt for {session_id} ({len(system_prompt)} chars)")
+            except Exception as e:
+                logger.warning(f"Failed to build system prompt: {e}")
+                system_prompt = None
 
         # Execute turn through AgentRuntime
         async for event in self.agent_runtime.run_turn(
@@ -177,6 +209,7 @@ class RuntimeEnv:
             message=message,
             tools=tools,
             max_tokens=max_tokens or self.config.get("max_tokens"),
+            system_prompt=system_prompt,
         ):
             yield event
 

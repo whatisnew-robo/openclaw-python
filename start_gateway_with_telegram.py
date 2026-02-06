@@ -31,6 +31,8 @@ async def main():
         from openclaw.agents.tools.registry import ToolRegistry
         from openclaw.skills.loader import SkillLoader
         from openclaw.agents.system_prompt import build_agent_system_prompt, format_skills_for_prompt
+        from openclaw.agents.system_prompt_bootstrap import load_bootstrap_files, format_bootstrap_context
+        from openclaw.agents.system_prompt_params import build_system_prompt_params, get_runtime_info
         
         logger.info("=" * 60)
         logger.info("🚀 启动 OpenClaw Gateway with Telegram")
@@ -149,24 +151,44 @@ async def main():
             skills_prompt = None
             eligible_skills = []
         
-        # 7. 构建 System Prompt (添加当前日期信息)
+        # 7. 构建 System Prompt (使用新架构)
         logger.info("📝 构建 System Prompt...")
-        from datetime import datetime
-        current_date = datetime.now().strftime("%Y年%m月%d日")
         
+        # Build runtime params
+        params = build_system_prompt_params(
+            config=config,
+            workspace_dir=workspace_dir,
+            runtime={
+                "agent_id": "main",
+                "model": model,
+                "channel": "telegram"
+            }
+        )
+        
+        # Load bootstrap files
+        bootstrap_files = load_bootstrap_files(workspace_dir)
+        context_files = format_bootstrap_context(bootstrap_files)
+        
+        # Build system prompt with new parameters
         system_prompt = build_agent_system_prompt(
             workspace_dir=workspace_dir,
             tool_names=tool_names,
+            tool_summaries=None,  # uses CORE_TOOL_SUMMARIES defaults
             skills_prompt=skills_prompt,
-            mode="full"
+            prompt_mode="full",
+            runtime_info=params["runtime_info"],
+            user_timezone=params["user_timezone"],
+            context_files=context_files,
         )
-        # 在 system prompt 中添加当前日期
-        system_prompt = f"{system_prompt}\n\n## Current Date\nToday is: {current_date}\n"
         
         logger.info(f"✅ System Prompt 构建成功 ({len(system_prompt)} 字符)")
-        logger.info(f"   当前日期: {current_date}")
+        if params["user_timezone"]:
+            logger.info(f"   时区: {params['user_timezone']}")
+        if params["repo_root"]:
+            logger.info(f"   Git 仓库: {params['repo_root']}")
         if eligible_skills:
             logger.info(f"   包含 {len(eligible_skills)} 个 skills")
+        logger.info(f"   加载了 {len(context_files)} 个 bootstrap 文件")
         
         # 8. 创建 Gateway Server (传递工具和 system prompt)
         logger.info("🌐 创建 Gateway Server...")
