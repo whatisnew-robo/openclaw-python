@@ -2,6 +2,8 @@
 Authentication configuration for onboarding wizard
 Handles API key collection, OAuth flows, and auth profile management
 """
+from __future__ import annotations
+
 
 import os
 from pathlib import Path

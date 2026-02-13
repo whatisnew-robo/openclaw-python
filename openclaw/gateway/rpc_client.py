@@ -1,4 +1,6 @@
 """Gateway RPC client for CLI commands (WebSocket-based)"""
+from __future__ import annotations
+
 
 import asyncio
 import json

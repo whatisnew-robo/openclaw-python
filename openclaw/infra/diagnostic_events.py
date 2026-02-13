@@ -1,4 +1,6 @@
 """Diagnostic event system (matches TypeScript infra/diagnostic-events.ts)"""
+from __future__ import annotations
+
 
 import asyncio
 import logging

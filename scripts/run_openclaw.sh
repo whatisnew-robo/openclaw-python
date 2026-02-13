@@ -1,8 +1,8 @@
 #!/bin/bash
-# OpenClaw 快速运行脚本
+# OpenClaw Quick Run Script
 
-# 进入项目目录
+# Change to project directory
 cd "$(dirname "$0")"
 
-# 使用虚拟环境的 Python 运行命令
+# Run OpenClaw using virtual environment Python
 .venv/bin/python -m openclaw.cli.main "$@"

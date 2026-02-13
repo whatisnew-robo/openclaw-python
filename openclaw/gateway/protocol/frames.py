@@ -1,4 +1,6 @@
 """Protocol frame definitions for Gateway WebSocket communication"""
+from __future__ import annotations
+
 
 from typing import Any, Literal
 
@@ -49,7 +51,7 @@ class ConnectRequest(BaseModel):
     """Connection handshake request"""
 
     minProtocol: int = Field(default=1, description="Minimum supported protocol version")
-    maxProtocol: int = Field(default=1, description="Maximum supported protocol version")
+    maxProtocol: int = Field(default=3, description="Maximum supported protocol version")
     client: dict[str, Any] = Field(
         default_factory=lambda: {
             "id": "gateway-client",
@@ -59,9 +61,13 @@ class ConnectRequest(BaseModel):
         },
         description="Client information"
     )
-    role: str = Field(default="client", description="Client role (client/node)")
+    role: str | None = Field(default=None, description="Client role (operator/node)")
     scopes: list[str] | None = Field(default=None, description="Requested scopes")
     auth: dict[str, Any] | None = Field(default=None, description="Authentication credentials")
+    deviceIdentity: dict[str, Any] | None = Field(
+        default=None,
+        description="Device identity for device-based authentication"
+    )
 
 
 class HelloResponse(BaseModel):

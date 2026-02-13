@@ -2,6 +2,8 @@
 
 Implements the full 40-step TypeScript gateway initialization in Python.
 """
+from __future__ import annotations
+
 
 import asyncio
 import logging

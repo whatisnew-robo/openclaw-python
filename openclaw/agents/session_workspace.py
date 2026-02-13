@@ -5,6 +5,8 @@ Based on openclaw TypeScript: src/agents/sandbox/shared.ts
 Each session gets its own isolated workspace directory for file generation.
 This prevents file pollution and enables proper session isolation.
 """
+from __future__ import annotations
+
 
 import hashlib
 import re

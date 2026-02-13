@@ -1,4 +1,6 @@
 """Heartbeat event system (matches TypeScript infra/heartbeat-events.ts)"""
+from __future__ import annotations
+
 
 import asyncio
 import logging

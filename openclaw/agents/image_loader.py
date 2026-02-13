@@ -8,6 +8,8 @@ Implements intelligent image loading that:
 - Skips images already loaded in previous messages
 - Only scans user messages (not assistant messages)
 """
+from __future__ import annotations
+
 
 import logging
 import re

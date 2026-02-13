@@ -3,6 +3,8 @@
 Fully aligned with TypeScript openclaw/src/gateway/server.impl.ts startGatewayServer()
 Implements all 40 initialization steps.
 """
+from __future__ import annotations
+
 
 import asyncio
 import logging
@@ -119,8 +121,8 @@ class GatewayBootstrapEnhanced:
         # Step 7: Ensure Control UI assets are built
         logger.info("Step 7: Ensuring Control UI assets")
         try:
-            from ..infra.control_ui_assets import ensure_control_ui_assets_built
-            await ensure_control_ui_assets_built(workspace_dir)
+            from ..infra.ui_assets import ensure_ui_assets_built
+            await ensure_ui_assets_built(workspace_dir)
         except Exception as e:
             logger.warning(f"Control UI assets check failed: {e}")
         results["steps_completed"] += 1

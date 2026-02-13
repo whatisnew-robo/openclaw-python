@@ -2,6 +2,8 @@
 
 Exports metrics, traces, and logs to OTLP backends (Jaeger, Prometheus, Datadog, etc.)
 """
+from __future__ import annotations
+
 
 import logging
 import os

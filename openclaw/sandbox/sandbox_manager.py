@@ -1,4 +1,6 @@
 """Sandbox manager for isolated code execution"""
+from __future__ import annotations
+
 
 import asyncio
 import logging

@@ -4,6 +4,8 @@ File management utilities for generated files (PPT, PDFs, images, etc.)
 This module provides utilities for organizing and naming generated files
 in a consistent way across all channels and skills.
 """
+from __future__ import annotations
+
 
 import re
 import logging
