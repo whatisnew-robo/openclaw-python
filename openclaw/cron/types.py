@@ -11,16 +11,16 @@ from typing import Any, Literal
 class AtSchedule:
     """One-time absolute timestamp schedule"""
     
-    type: Literal["at"] = "at"
     timestamp: str  # ISO-8601 format
+    type: Literal["at"] = "at"
 
 
 @dataclass
 class EverySchedule:
     """Interval-based schedule"""
     
-    type: Literal["every"] = "every"
     interval_ms: int
+    type: Literal["every"] = "every"
     anchor: str | None = None  # Optional ISO-8601 anchor point
 
 
@@ -28,8 +28,8 @@ class EverySchedule:
 class CronSchedule:
     """Cron expression schedule"""
     
-    type: Literal["cron"] = "cron"
     expression: str  # e.g., "0 9 * * *"
+    type: Literal["cron"] = "cron"
     timezone: str | None = "UTC"
 
 
@@ -42,16 +42,16 @@ CronScheduleType = AtSchedule | EverySchedule | CronSchedule
 class SystemEventPayload:
     """System event payload for main session"""
     
-    kind: Literal["systemEvent"] = "systemEvent"
     text: str  # System event text to enqueue
+    kind: Literal["systemEvent"] = "systemEvent"
 
 
 @dataclass
 class AgentTurnPayload:
     """Agent turn payload for isolated sessions"""
     
-    kind: Literal["agentTurn"] = "agentTurn"
     prompt: str  # Prompt to send to agent
+    kind: Literal["agentTurn"] = "agentTurn"
     model: str | None = None  # Optional model override
 
 
@@ -102,14 +102,14 @@ class CronJob:
     delete_after_run: bool = False  # Auto-delete for one-shot jobs
     
     # Scheduling
-    schedule: CronScheduleType = field(default_factory=lambda: AtSchedule(timestamp=""))
+    schedule: CronScheduleType = field(default_factory=lambda: AtSchedule(timestamp="", type="at"))
     
     # Execution
     session_target: Literal["main", "isolated"] = "main"
     wake_mode: Literal["next-heartbeat", "now"] = "next-heartbeat"
     
     # Payload
-    payload: CronPayload = field(default_factory=lambda: SystemEventPayload(text=""))
+    payload: CronPayload = field(default_factory=lambda: SystemEventPayload(text="", kind="systemEvent"))
     
     # Delivery (for isolated jobs)
     delivery: CronDelivery | None = None
@@ -210,20 +210,23 @@ class CronJob:
         
         if schedule_type == "at":
             schedule: CronScheduleType = AtSchedule(
-                timestamp=schedule_data.get("timestamp", "")
+                timestamp=schedule_data.get("timestamp", ""),
+                type="at"
             )
         elif schedule_type == "every":
             schedule = EverySchedule(
                 interval_ms=schedule_data.get("interval_ms", 0),
+                type="every",
                 anchor=schedule_data.get("anchor")
             )
         elif schedule_type == "cron":
             schedule = CronSchedule(
                 expression=schedule_data.get("expression", ""),
+                type="cron",
                 timezone=schedule_data.get("timezone", "UTC")
             )
         else:
-            schedule = AtSchedule(timestamp="")
+            schedule = AtSchedule(timestamp="", type="at")
         
         # Parse payload
         payload_data = data.get("payload", {})
@@ -231,15 +234,17 @@ class CronJob:
         
         if payload_kind == "systemEvent":
             payload: CronPayload = SystemEventPayload(
-                text=payload_data.get("text", "")
+                text=payload_data.get("text", ""),
+                kind="systemEvent"
             )
         elif payload_kind == "agentTurn":
             payload = AgentTurnPayload(
                 prompt=payload_data.get("prompt", ""),
+                kind="agentTurn",
                 model=payload_data.get("model")
             )
         else:
-            payload = SystemEventPayload(text="")
+            payload = SystemEventPayload(text="", kind="systemEvent")
         
         # Parse delivery
         delivery = None

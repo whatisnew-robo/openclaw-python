@@ -17,11 +17,11 @@ async def serve_control_ui(app: web.Application):
     Provides the web management interface for OpenClaw.
     """
     # Get UI directory path
-    ui_dir = Path(__file__).parent.parent / "static" / "control-ui"
+    ui_dir = Path(__file__).parent.parent.parent / "ui" / "dist"
     
     if not ui_dir.exists():
         logger.warning(f"Control UI not found at {ui_dir}")
-        logger.warning("Run 'cd control-ui && npm install && npm run build' to build UI")
+        logger.warning("Run 'cd ui && pnpm install && pnpm build' to build UI")
         return
     
     # Check if index.html exists

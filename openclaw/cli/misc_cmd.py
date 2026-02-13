@@ -33,16 +33,6 @@ def register_misc_commands(app: typer.Typer):
     
     @app.command("onboard")
     def onboard(
-        install_daemon: bool = typer.Option(
-            False,
-            "--install-daemon",
-            help="Install Gateway as system service after onboarding"
-        ),
-        non_interactive: bool = typer.Option(
-            False,
-            "--non-interactive",
-            help="Non-interactive mode (use environment variables)"
-        ),
         workspace: str = typer.Option(
             None,
             "--workspace",
@@ -53,24 +43,29 @@ def register_misc_commands(app: typer.Typer):
         try:
             import asyncio
             from pathlib import Path
-            from ..wizard.onboarding import run_onboarding
+            from ..wizard.onboarding import run_onboarding_wizard
             
             console.print("[cyan]Starting onboarding wizard...[/cyan]\n")
             
-            workspace_dir = Path(workspace) if workspace else None
+            workspace_dir = Path(workspace) if workspace else Path.home() / ".openclaw"
             
-            result = asyncio.run(run_onboarding(
-                workspace_dir=workspace_dir,
-                install_daemon=install_daemon,
-                non_interactive=non_interactive
+            result = asyncio.run(run_onboarding_wizard(
+                workspace_dir=workspace_dir
             ))
             
-            # Success message already printed by wizard
+            if result.get("completed"):
+                console.print("\n[green]✓[/green] Onboarding completed successfully!")
+            elif result.get("skipped"):
+                console.print("\n[yellow]Onboarding skipped[/yellow]")
+                if reason := result.get("reason"):
+                    console.print(f"  Reason: {reason}")
             
         except KeyboardInterrupt:
             console.print("\n[yellow]Onboarding cancelled[/yellow]")
         except Exception as e:
             console.print(f"[red]Error:[/red] {e}")
+            import traceback
+            traceback.print_exc()
             raise typer.Exit(1)
     
     @app.command("setup")

@@ -23,7 +23,7 @@ console = Console()
 
 @app.command()
 def start(
-    port: int = typer.Option(8765, "--port", "-p", help="WebSocket port for gateway"),
+    port: int = typer.Option(18789, "--port", "-p", help="WebSocket port for gateway"),
     telegram: bool = typer.Option(True, "--telegram/--no-telegram", help="Enable Telegram channel"),
     log_level: str = typer.Option("INFO", "--log-level", "-l", help="Log level"),
 ):

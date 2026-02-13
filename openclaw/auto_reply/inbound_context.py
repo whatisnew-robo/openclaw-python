@@ -1,143 +1,439 @@
-"""Inbound message context normalization"""
+"""
+Inbound message context processing
+
+This module implements message context building and normalization to match TypeScript's
+inbound-context.ts functionality.
+"""
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any
-
-from .types import InboundMessage
-from .envelope import InboundEnvelope
+import re
+from typing import Any, Optional, TypedDict
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class InboundContext:
+class MsgContext(BaseModel):
     """
-    Normalized inbound message context
+    Message context for agent processing
     
-    Provides unified interface for message processing across all channels.
+    Represents a normalized inbound message with all relevant metadata.
+    This matches TypeScript's MsgContext interface.
     """
     
-    # Message
-    envelope: InboundEnvelope
+    # Core message content
+    Body: str
+    """Main message body (normalized)"""
     
-    # Normalized sender
-    sender_id: str
-    sender_name: str
-    sender_handle: str | None = None
+    BodyForAgent: Optional[str] = None
+    """Body variant for agent (with sender metadata if needed)"""
     
-    # Normalized target
-    channel_id: str
-    thread_id: str | None = None
+    BodyForCommands: Optional[str] = None
+    """Body variant for command processing"""
     
-    # Chat context
-    is_dm: bool = False
-    is_group: bool = False
-    group_name: str | None = None
+    CommandBody: Optional[str] = None
+    """Command-specific body (without command prefix)"""
     
-    # Message content
-    text: str = ""
-    has_attachments: bool = False
+    RawBody: Optional[str] = None
+    """Raw body before any processing"""
     
-    # Mentions and references
-    mentions: list[str] = field(default_factory=list)
-    reply_to: str | None = None
+    Transcript: Optional[str] = None
+    """Transcript of previous conversation"""
     
-    # Agent configuration
-    agent_id: str | None = None
-    force_agent: bool = False
+    ThreadStarterBody: Optional[str] = None
+    """Body of thread starter message"""
     
-    # Metadata
-    metadata: dict[str, Any] = field(default_factory=dict)
+    UntrustedContext: Optional[list[str]] = None
+    """Untrusted context items (e.g., group history)"""
+    
+    # Session and routing
+    SessionKey: str
+    """Session key for conversation tracking"""
+    
+    From: Optional[str] = None
+    """Sender identifier"""
+    
+    To: Optional[str] = None
+    """Recipient identifier"""
+    
+    ChatType: Optional[str] = None
+    """Chat type (dm, group, channel, etc.)"""
+    
+    ConversationLabel: Optional[str] = None
+    """Human-readable conversation label"""
+    
+    # Media
+    MediaPath: Optional[str] = None
+    """Local path to downloaded media"""
+    
+    MediaUrls: Optional[list[str]] = None
+    """URLs of media attachments"""
+    
+    # Reply context
+    ReplyToId: Optional[str] = None
+    """ID of message being replied to"""
+    
+    ReplyToBody: Optional[str] = None
+    """Body of message being replied to"""
+    
+    # Flags
+    WasMentioned: bool = False
+    """Whether bot was mentioned in this message"""
+    
+    CommandAuthorized: bool = False
+    """Whether sender is authorized for commands"""
+    
+    # Channel routing
+    OriginatingChannel: Optional[str] = None
+    """Original channel where message came from"""
+    
+    OriginatingTo: Optional[str] = None
+    """Original recipient"""
+    
+    # Sender metadata
+    SenderName: Optional[str] = None
+    """Sender's display name"""
+    
+    SenderUsername: Optional[str] = None
+    """Sender's username"""
+    
+    # Group context
+    GroupId: Optional[str] = None
+    """Group identifier"""
+    
+    GroupName: Optional[str] = None
+    """Group display name"""
+    
+    TopicId: Optional[str | int] = None
+    """Topic/thread ID"""
+    
+    TopicName: Optional[str] = None
+    """Topic/thread name"""
+    
+    # Additional metadata
+    MessageId: Optional[str] = None
+    """Message identifier"""
+    
+    Timestamp: Optional[str] = None
+    """Message timestamp"""
+    
+    Channel: Optional[str] = None
+    """Current channel"""
+    
+    AccountId: Optional[str] = None
+    """Account identifier"""
+
+    model_config = {"extra": "allow"}
 
 
-def finalize_inbound_context(
-    message: InboundMessage,
-    config: dict[str, Any] | None = None
-) -> InboundContext:
+class FinalizedMsgContext(MsgContext):
     """
-    Finalize inbound context from message
+    Finalized message context with all normalizations applied
     
-    Normalizes message data into InboundContext for consistent processing.
+    This is the output of finalize_inbound_context()
+    """
+    pass
+
+
+class FinalizeOptions(TypedDict, total=False):
+    """Options for finalize_inbound_context"""
+    force_body_for_agent: bool
+    force_body_for_commands: bool
+    force_chat_type: bool
+    force_conversation_label: bool
+
+
+# ============================================================================
+# Text Normalization
+# ============================================================================
+
+def normalize_inbound_text_newlines(text: str) -> str:
+    """
+    Normalize newlines in inbound text
+    
+    Converts various newline styles to \n
     
     Args:
-        message: Inbound message
-        config: Optional configuration
+        text: Input text
         
     Returns:
-        Normalized context
+        Normalized text
     """
-    config = config or {}
+    if not text:
+        return ""
     
-    # Create envelope
-    envelope = InboundEnvelope(message=message)
+    # Replace \r\n with \n
+    text = text.replace("\r\n", "\n")
     
-    # Normalize sender
-    sender_id = message.sender_id
-    sender_name = message.sender_name or message.sender_id
-    sender_handle = _extract_handle(sender_name)
+    # Replace remaining \r with \n
+    text = text.replace("\r", "\n")
     
-    # Normalize target
-    channel_id = message.channel_id
-    thread_id = message.thread_id
-    
-    # Chat type
-    is_dm = message.is_dm
-    is_group = message.is_group
-    
-    # Content
-    text = (message.text or "").strip()
-    has_attachments = len(message.attachments) > 0
-    
-    # Mentions
-    mentions = message.mentions or []
-    reply_to = message.reply_to
-    
-    # Agent configuration
-    agent_id = config.get("agent_id")
-    force_agent = config.get("force_agent", False)
-    
-    # Build context
-    context = InboundContext(
-        envelope=envelope,
-        sender_id=sender_id,
-        sender_name=sender_name,
-        sender_handle=sender_handle,
-        channel_id=channel_id,
-        thread_id=thread_id,
-        is_dm=is_dm,
-        is_group=is_group,
-        text=text,
-        has_attachments=has_attachments,
-        mentions=mentions,
-        reply_to=reply_to,
-        agent_id=agent_id,
-        force_agent=force_agent,
-        metadata=config.get("metadata", {}),
-    )
-    
-    logger.debug(
-        f"Finalized context: channel={channel_id}, "
-        f"sender={sender_id}, is_dm={is_dm}, text_len={len(text)}"
-    )
-    
-    return context
+    return text
 
 
-def _extract_handle(name: str) -> str | None:
-    """Extract handle from name (e.g., @username)"""
-    if not name:
+def _normalize_text_field(value: Any) -> Optional[str]:
+    """Normalize a text field value"""
+    if not isinstance(value, str):
+        return None
+    return normalize_inbound_text_newlines(value)
+
+
+# ============================================================================
+# Chat Type Normalization
+# ============================================================================
+
+def normalize_chat_type(chat_type: Optional[str]) -> Optional[str]:
+    """
+    Normalize chat type to standard values
+    
+    Args:
+        chat_type: Input chat type
+        
+    Returns:
+        Normalized chat type (dm, group, channel, etc.)
+    """
+    if not chat_type:
         return None
     
-    # Check for @username pattern
-    if name.startswith("@"):
-        return name[1:]
+    chat_type = chat_type.lower().strip()
     
-    # Check if name contains @ symbol
-    if "@" in name:
-        parts = name.split("@")
-        if len(parts) == 2:
-            return parts[1]
+    # Map variants to standard types
+    type_map = {
+        "private": "dm",
+        "direct": "dm",
+        "supergroup": "group",
+        "public": "channel",
+    }
     
+    return type_map.get(chat_type, chat_type)
+
+
+# ============================================================================
+# Conversation Label
+# ============================================================================
+
+def resolve_conversation_label(ctx: MsgContext) -> Optional[str]:
+    """
+    Resolve conversation label from context
+    
+    Args:
+        ctx: Message context
+        
+    Returns:
+        Conversation label
+    """
+    # Use explicit label if present
+    if ctx.ConversationLabel:
+        return ctx.ConversationLabel
+    
+    # Build label from context
+    if ctx.ChatType == "dm":
+        # DM: use sender name/username
+        if ctx.SenderName:
+            return f"DM with {ctx.SenderName}"
+        if ctx.SenderUsername:
+            return f"DM with @{ctx.SenderUsername}"
+        if ctx.From:
+            return f"DM with {ctx.From}"
+    
+    elif ctx.ChatType == "group":
+        # Group: use group name
+        if ctx.GroupName:
+            return ctx.GroupName
+        if ctx.GroupId:
+            return f"Group {ctx.GroupId}"
+    
+    elif ctx.ChatType == "channel":
+        # Channel: use group name (same as group for Telegram)
+        if ctx.GroupName:
+            return ctx.GroupName
+        if ctx.GroupId:
+            return f"Channel {ctx.GroupId}"
+    
+    # Fallback
     return None
+
+
+# ============================================================================
+# Sender Metadata Formatting
+# ============================================================================
+
+def format_inbound_body_with_sender_meta(
+    ctx: MsgContext,
+    body: str,
+) -> str:
+    """
+    Add sender metadata to message body for group/channel messages
+    
+    For group and channel messages, prepends sender information to help the agent
+    understand who said what.
+    
+    Args:
+        ctx: Message context
+        body: Message body
+        
+    Returns:
+        Body with sender metadata (if applicable)
+    """
+    # Only add metadata for group/channel messages
+    if ctx.ChatType not in ["group", "channel"]:
+        return body
+    
+    # Skip if body already has sender metadata (starts with name followed by colon)
+    if body and re.match(r"^\[?[\w\s]+\]?\s*:\s", body):
+        return body
+    
+    # Build sender identifier
+    sender = None
+    if ctx.SenderName:
+        sender = ctx.SenderName
+    elif ctx.SenderUsername:
+        sender = f"@{ctx.SenderUsername}"
+    elif ctx.From:
+        sender = ctx.From
+    
+    if not sender:
+        return body
+    
+    # Prepend sender metadata
+    # Format: "SenderName: message"
+    if body:
+        return f"{sender}: {body}"
+    
+    return body
+
+
+# ============================================================================
+# Finalize Inbound Context
+# ============================================================================
+
+def finalize_inbound_context(
+    ctx: MsgContext,
+    opts: Optional[FinalizeOptions] = None,
+) -> FinalizedMsgContext:
+    """
+    Finalize inbound message context
+    
+    Applies all normalizations and transformations to prepare context for agent processing.
+    This matches TypeScript's finalizeInboundContext function.
+    
+    Args:
+        ctx: Input message context
+        opts: Finalization options
+        
+    Returns:
+        Finalized message context
+    """
+    opts = opts or {}
+    
+    # Normalize main body
+    ctx.Body = normalize_inbound_text_newlines(ctx.Body or "")
+    
+    # Normalize optional text fields
+    ctx.RawBody = _normalize_text_field(ctx.RawBody)
+    ctx.CommandBody = _normalize_text_field(ctx.CommandBody)
+    ctx.Transcript = _normalize_text_field(ctx.Transcript)
+    ctx.ThreadStarterBody = _normalize_text_field(ctx.ThreadStarterBody)
+    
+    # Normalize untrusted context
+    if isinstance(ctx.UntrustedContext, list):
+        normalized_untrusted = [
+            normalize_inbound_text_newlines(entry)
+            for entry in ctx.UntrustedContext
+            if entry
+        ]
+        ctx.UntrustedContext = [entry for entry in normalized_untrusted if entry]
+    
+    # Normalize chat type
+    chat_type = normalize_chat_type(ctx.ChatType)
+    if chat_type and (opts.get("force_chat_type") or ctx.ChatType != chat_type):
+        ctx.ChatType = chat_type
+    
+    # Set BodyForAgent
+    if opts.get("force_body_for_agent"):
+        body_for_agent_source = ctx.Body
+    else:
+        body_for_agent_source = ctx.BodyForAgent or ctx.Body
+    
+    ctx.BodyForAgent = normalize_inbound_text_newlines(body_for_agent_source)
+    
+    # Set BodyForCommands
+    if opts.get("force_body_for_commands"):
+        body_for_commands_source = ctx.CommandBody or ctx.RawBody or ctx.Body
+    else:
+        body_for_commands_source = (
+            ctx.BodyForCommands
+            or ctx.CommandBody
+            or ctx.RawBody
+            or ctx.Body
+        )
+    
+    ctx.BodyForCommands = normalize_inbound_text_newlines(body_for_commands_source)
+    
+    # Resolve conversation label
+    explicit_label = ctx.ConversationLabel
+    if opts.get("force_conversation_label") or not explicit_label:
+        resolved = resolve_conversation_label(ctx)
+        if resolved:
+            ctx.ConversationLabel = resolved
+    
+    # Add sender metadata to body for group/channel messages
+    ctx.Body = format_inbound_body_with_sender_meta(ctx, ctx.Body)
+    ctx.BodyForAgent = format_inbound_body_with_sender_meta(ctx, ctx.BodyForAgent)
+    
+    # Ensure CommandAuthorized is always set (default False)
+    if ctx.CommandAuthorized is None:
+        ctx.CommandAuthorized = False
+    
+    return FinalizedMsgContext(**ctx.model_dump())
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+def build_session_key_from_context(
+    agent_id: str,
+    channel: str,
+    chat_type: str,
+    peer_id: str,
+    thread_id: Optional[str | int] = None,
+) -> str:
+    """
+    Build session key from context components
+    
+    Args:
+        agent_id: Agent identifier
+        channel: Channel name (telegram, discord, etc.)
+        chat_type: Chat type (dm, group, channel)
+        peer_id: Peer identifier (user ID or group ID)
+        thread_id: Thread ID (optional)
+        
+    Returns:
+        Session key in format: agent:{id}:{channel}:{chat_type}:{peer_id}[:thread:{thread_id}]
+    """
+    from openclaw.routing.session_key import build_agent_peer_session_key
+    
+    # Determine peer kind
+    if chat_type == "dm":
+        peer_kind = "dm"
+    elif chat_type == "group":
+        peer_kind = "group"
+    elif chat_type == "channel":
+        peer_kind = "channel"
+    else:
+        peer_kind = "dm"  # Default fallback
+    
+    key = build_agent_peer_session_key(
+        agent_id=agent_id,
+        channel=channel,
+        peer_kind=peer_kind,
+        peer_id=peer_id,
+    )
+    
+    # Add thread suffix if present
+    if thread_id:
+        key = f"{key}:thread:{thread_id}"
+    
+    return key

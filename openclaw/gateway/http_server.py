@@ -19,7 +19,7 @@ class ControlUIServer:
         self.gateway = gateway
         self.base_path = base_path.rstrip("/")
         self.ui_port = ui_port
-        self.ui_dir = Path(__file__).parent.parent / "static" / "control-ui"
+        self.ui_dir = Path(__file__).parent.parent.parent / "ui" / "dist"
         
         self.app = FastAPI(
             title="OpenClaw Control UI",
@@ -203,7 +203,7 @@ class ControlUIServer:
             <div class="command">cd openclaw/ui</div>
             <div class="command">pnpm install</div>
             <div class="command">pnpm build</div>
-            <div class="command">cp -r ../dist/control-ui openclaw-python/openclaw/web/static/</div>
+            <div class="command">cd ui && pnpm install && pnpm build</div>
         </div>
         
         <p>After building, restart the gateway to serve the full control UI.</p>

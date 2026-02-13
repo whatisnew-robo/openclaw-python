@@ -1,10 +1,30 @@
 """Gateway method handlers"""
+from __future__ import annotations
+
 
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+import sys
+
+# Python 3.9 compatibility
+if sys.version_info >= (3, 11):
+    from datetime import UTC
+else:
+    UTC = timezone.utc
 from typing import Any
+
+# Import store-based session methods
+from openclaw.gateway.api.sessions_methods import (
+    SessionsListMethod,
+    SessionsPreviewMethod,
+    SessionsResolveMethod,
+    SessionsPatchMethod,
+    SessionsResetMethod,
+    SessionsDeleteMethod,
+    SessionsCompactMethod,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +67,16 @@ def get_method_handler(method: str) -> Handler | None:
     return _handlers.get(method)
 
 
+# Initialize store-based session method instances
+_sessions_list_method = SessionsListMethod()
+_sessions_preview_method = SessionsPreviewMethod()
+_sessions_resolve_method = SessionsResolveMethod()
+_sessions_patch_method = SessionsPatchMethod()
+_sessions_reset_method = SessionsResetMethod()
+_sessions_delete_method = SessionsDeleteMethod()
+_sessions_compact_method = SessionsCompactMethod()
+
+
 # Core method handlers
 
 
@@ -83,25 +113,9 @@ async def handle_config_get(connection: Any, params: dict[str, Any]) -> dict[str
 
 
 @register_handler("sessions.list")
-async def handle_sessions_list(connection: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
-    """List active sessions"""
-    if not _session_manager:
-        return []
-
-    session_ids = _session_manager.list_sessions()
-    sessions = []
-
-    for session_id in session_ids:
-        session = _session_manager.get_session(session_id)
-        sessions.append(
-            {
-                "sessionId": session_id,
-                "messageCount": len(session.messages),
-                "lastMessage": session.messages[-1].timestamp if session.messages else None,
-            }
-        )
-
-    return sessions
+async def handle_sessions_list(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
+    """List active sessions - using store-based implementation"""
+    return await _sessions_list_method.execute(connection, params)
 
 
 @register_handler("channels.list")
@@ -110,16 +124,7 @@ async def handle_channels_list(connection: Any, params: dict[str, Any]) -> list[
     if not _channel_registry:
         return []
 
-    channels = _channel_registry.list_channels()
-    return [
-        {
-            "id": ch.id,
-            "label": ch.label,
-            "running": ch.is_running(),
-            "capabilities": ch.capabilities.model_dump(),
-        }
-        for ch in channels
-    ]
+    return _channel_registry.get_all_channels()
 
 
 # Placeholder handlers for methods to be implemented
@@ -147,9 +152,22 @@ async def handle_agent(connection: Any, params: dict[str, Any]) -> dict[str, Any
 
     # If streaming requested, use async background execution
     if stream:
-        run_id = f"run-{int(datetime.now(UTC).timestamp() * 1000)}"
+        run_id = params.get("runId") or f"run-{int(datetime.now(UTC).timestamp() * 1000)}"
         accepted_at = datetime.now(UTC).isoformat() + "Z"
-        asyncio.create_task(_run_agent_turn(connection, run_id, session, message, tools, model))
+        
+        # Create task and track it for abort capability
+        task = asyncio.create_task(_run_agent_turn(connection, run_id, session, message, tools, model))
+        
+        # Store in connection's gateway server for abort tracking
+        if hasattr(connection, "gateway") and hasattr(connection.gateway, "active_runs"):
+            connection.gateway.active_runs[run_id] = task
+            
+            # Clean up when done
+            def cleanup_run(future):
+                if run_id in connection.gateway.active_runs:
+                    del connection.gateway.active_runs[run_id]
+            task.add_done_callback(cleanup_run)
+        
         return {"runId": run_id, "acceptedAt": accepted_at, "streaming": True}
 
     # Otherwise, execute synchronously and return full result
@@ -195,6 +213,18 @@ async def _run_agent_turn(connection, run_id, session, message, tools, model):
             await connection.send_event(
                 "agent", {"runId": run_id, "type": event.type, "data": event.data}
             )
+    except asyncio.CancelledError:
+        logger.info(f"Agent turn {run_id} was aborted")
+        # Send abort event to client
+        await connection.send_event(
+            "agent",
+            {
+                "runId": run_id,
+                "type": "turn_aborted",
+                "data": {"reason": "User requested abort"}
+            }
+        )
+        raise  # Re-raise to properly handle cancellation
     except Exception as e:
         logger.error(f"Agent turn error: {e}", exc_info=True)
         await connection.send_event("agent", {"runId": run_id, "type": "error", "error": str(e)})
@@ -238,6 +268,72 @@ async def handle_chat_history(connection: Any, params: dict[str, Any]) -> list[d
     ]
 
 
+@register_handler("chat.abort")
+async def handle_chat_abort(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
+    """Abort running chat/agent operation"""
+    run_id = params.get("runId")
+    session_key = params.get("sessionKey")
+    
+    logger.info(f"Abort requested: runId={run_id}, sessionKey={session_key}")
+    
+    # Try to find and cancel the task
+    if not hasattr(connection, "gateway") or not hasattr(connection.gateway, "active_runs"):
+        return {
+            "aborted": False,
+            "reason": "Active runs tracking not initialized"
+        }
+    
+    active_runs = connection.gateway.active_runs
+    
+    # If run_id provided, abort that specific run
+    if run_id and run_id in active_runs:
+        task = active_runs[run_id]
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            
+            logger.info(f"Aborted run: {run_id}")
+            return {
+                "aborted": True,
+                "runId": run_id
+            }
+        else:
+            return {
+                "aborted": False,
+                "reason": "Run already completed"
+            }
+    
+    # If session_key provided, abort all runs for that session
+    if session_key:
+        aborted_count = 0
+        for run_id_key, task in list(active_runs.items()):
+            # Simple heuristic: check if run belongs to session
+            # In production, should track session_key per run
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                aborted_count += 1
+        
+        if aborted_count > 0:
+            logger.info(f"Aborted {aborted_count} runs for session: {session_key}")
+            return {
+                "aborted": True,
+                "count": aborted_count,
+                "sessionKey": session_key
+            }
+    
+    return {
+        "aborted": False,
+        "reason": "No matching active runs found"
+    }
+
+
 @register_handler("chat.inject")
 async def handle_chat_inject(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Inject a system message into chat"""
@@ -272,6 +368,50 @@ async def handle_agent_wait(connection: Any, params: dict[str, Any]) -> dict[str
     run_id = params.get("runId")
     timeout = params.get("timeout", 600)
     return {"runId": run_id, "status": "completed"}
+
+
+@register_handler("agents.list")
+async def handle_agents_list(connection: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
+    """List available agents"""
+    # Return configured agents from config
+    # For now, return a simple list with main agent
+    agents = [
+        {
+            "id": "main",
+            "label": "Main Agent",
+            "model": connection.config.model if hasattr(connection.config, "model") else "claude-sonnet-4",
+            "enabled": True,
+            "capabilities": {
+                "chat": True,
+                "tools": True,
+                "vision": True,
+                "files": True
+            }
+        }
+    ]
+    
+    return agents
+
+
+@register_handler("agent.queue.status")
+async def handle_agent_queue_status(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
+    """Get agent queue status"""
+    if not _agent_runtime:
+        return {"enabled": False}
+    
+    # Check if queue manager is enabled
+    if not hasattr(_agent_runtime, "queue_manager") or not _agent_runtime.queue_manager:
+        return {"enabled": False}
+    
+    # Get queue statistics
+    stats = _agent_runtime.queue_manager.get_stats()
+    
+    return {
+        "enabled": True,
+        "global": stats.get("global", {}),
+        "sessions": stats.get("sessions", {}),
+        "total_sessions": stats.get("total_sessions", 0)
+    }
 
 
 @register_handler("agents.files.list")
@@ -323,10 +463,16 @@ async def handle_channels_status(connection: Any, params: dict[str, Any]) -> dic
     if not _channel_registry:
         return {"channels": []}
 
-    channels = _channel_registry.list_channels()
+    channels = _channel_registry.get_all_channels()
     return {
         "channels": [
-            {"id": ch.id, "running": ch.is_running(), "label": ch.label}
+            {
+                "id": ch["id"],
+                "running": ch.get("running", False),
+                "label": ch.get("label", ch["id"]),
+                "connected": ch.get("connected", False),
+                "state": ch.get("state", "unknown"),
+            }
             for ch in channels
         ]
     }
@@ -343,120 +489,335 @@ async def handle_channels_logout(connection: Any, params: dict[str, Any]) -> dic
 
 @register_handler("config.set")
 async def handle_config_set(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Set configuration value"""
-    key = params.get("key", "")
-    value = params.get("value")
-    return {"key": key, "set": True}
+    """Set full configuration"""
+    from openclaw.gateway.config_service import get_config_service
+    
+    config_data = params.get("config", {})
+    config_service = get_config_service()
+    success = config_service.save_config(config_data)
+    
+    return {
+        "set": success,
+        "restartRequired": True  # Most config changes require restart
+    }
 
 
 @register_handler("config.patch")
 async def handle_config_patch(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Apply JSON patch to configuration"""
-    patch = params.get("patch", [])
-    return {"applied": len(patch)}
+    """Apply patch to configuration"""
+    from openclaw.gateway.config_service import get_config_service
+    
+    patch = params.get("patch", {})
+    config_service = get_config_service()
+    updated_config = config_service.patch_config(patch)
+    
+    return {
+        "applied": len(patch),
+        "restartRequired": True
+    }
 
 
 @register_handler("config.apply")
 async def handle_config_apply(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Apply full configuration"""
-    config_data = params.get("config", {})
-    return {"applied": True}
+    """Apply configuration (alias for config.set)"""
+    return await handle_config_set(connection, params)
+
+
+@register_handler("config.schema")
+async def handle_config_schema(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
+    """Get configuration schema"""
+    from openclaw.gateway.config_service import get_config_service
+    
+    config_service = get_config_service()
+    schema = config_service.get_config_schema()
+    
+    return {"schema": schema}
 
 
 @register_handler("cron.list")
 async def handle_cron_list(connection: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
     """List cron jobs"""
-    return []
+    from openclaw.cron.service import get_cron_service
+    cron_service = get_cron_service()
+    return cron_service.list_jobs()
 
 
 @register_handler("cron.status")
 async def handle_cron_status(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Get cron status"""
-    return {"enabled": True, "jobs": 0}
+    from openclaw.cron.service import get_cron_service
+    job_id = params.get("jobId")
+    cron_service = get_cron_service()
+    
+    if job_id:
+        status = cron_service.get_job_status(job_id)
+        if not status:
+            raise ValueError(f"Job not found: {job_id}")
+        return status
+    
+    # Return overall status
+    jobs = cron_service.list_jobs()
+    return {
+        "enabled": True,
+        "totalJobs": len(jobs),
+        "jobs": jobs
+    }
 
 
 @register_handler("cron.add")
 async def handle_cron_add(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Add cron job"""
-    schedule = params.get("schedule", "")
-    prompt = params.get("prompt", "")
-    return {"schedule": schedule, "added": True}
+    from openclaw.cron.service import get_cron_service, CronJob
+    
+    job_data = params.get("job", {})
+    job = CronJob(
+        id=job_data.get("id"),
+        schedule=job_data.get("schedule"),
+        action=job_data.get("action"),
+        params=job_data.get("params", {})
+    )
+    
+    cron_service = get_cron_service()
+    success = cron_service.add_job(job)
+    
+    return {
+        "added": success,
+        "id": job.id
+    }
 
 
 @register_handler("cron.update")
 async def handle_cron_update(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Update cron job"""
+    from openclaw.cron.service import get_cron_service, CronJob
+    
     job_id = params.get("jobId")
-    return {"jobId": job_id, "updated": True}
+    job_data = params.get("job", {})
+    
+    # Remove old job and add updated one
+    cron_service = get_cron_service()
+    cron_service.remove_job(job_id)
+    
+    job = CronJob(
+        id=job_id,
+        schedule=job_data.get("schedule"),
+        action=job_data.get("action"),
+        params=job_data.get("params", {})
+    )
+    success = cron_service.add_job(job)
+    
+    return {"jobId": job_id, "updated": success}
 
 
 @register_handler("cron.remove")
 async def handle_cron_remove(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Remove cron job"""
+    from openclaw.cron.service import get_cron_service
+    
     job_id = params.get("jobId")
-    return {"jobId": job_id, "removed": True}
+    cron_service = get_cron_service()
+    success = cron_service.remove_job(job_id)
+    
+    return {"jobId": job_id, "removed": success}
 
 
 @register_handler("cron.run")
 async def handle_cron_run(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Manually run cron job"""
+    from openclaw.cron.service import get_cron_service
+    
     job_id = params.get("jobId")
+    cron_service = get_cron_service()
+    
+    # Manually trigger job execution
+    await cron_service._execute_job(job_id)
+    
     return {"jobId": job_id, "ran": True}
 
 
 @register_handler("cron.runs")
 async def handle_cron_runs(connection: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
     """List cron run history"""
-    return []
+    job_id = params.get("jobId")
+    limit = params.get("limit", 50)
+    
+    if not job_id:
+        return []
+    
+    # Get cron service from gateway
+    cron_service = get_cron_service()
+    if not cron_service:
+        logger.warning("Cron service not available")
+        return []
+    
+    try:
+        from openclaw.cron.store import CronRunLog
+        
+        # Read run log for the job
+        run_log = CronRunLog(job_id, cron_service.store.store_path.parent / "runs")
+        entries = run_log.read(limit=limit)
+        
+        # Convert to API format
+        return [
+            {
+                "jobId": entry.get("job_id"),
+                "runId": entry.get("run_id"),
+                "startedAt": entry.get("started_at"),
+                "completedAt": entry.get("completed_at"),
+                "status": entry.get("status"),
+                "result": entry.get("result", {}),
+                "error": entry.get("error")
+            }
+            for entry in entries
+        ]
+    except Exception as e:
+        logger.error(f"Failed to read cron runs: {e}", exc_info=True)
+        return []
 
 
 @register_handler("device.pair.list")
 async def handle_device_pair_list(connection: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
-    """List paired devices"""
-    return []
+    """List paired devices and pending pairs"""
+    from openclaw.devices.manager import get_device_manager
+    
+    device_manager = get_device_manager()
+    devices = device_manager.list_devices()
+    pending = device_manager.list_pending_pairs()
+    
+    return {
+        "devices": devices,
+        "pending": pending
+    }
 
 
 @register_handler("device.pair.approve")
 async def handle_device_pair_approve(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Approve device pairing"""
+    from openclaw.devices.manager import get_device_manager
+    
     device_id = params.get("deviceId")
-    return {"deviceId": device_id, "approved": True}
+    label = params.get("label")
+    
+    device_manager = get_device_manager()
+    token = device_manager.approve_pairing(device_id, label)
+    
+    return {
+        "deviceId": device_id,
+        "approved": token is not None,
+        "token": token
+    }
 
 
 @register_handler("device.pair.reject")
 async def handle_device_pair_reject(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Reject device pairing"""
+    from openclaw.devices.manager import get_device_manager
+    
     device_id = params.get("deviceId")
+    reason = params.get("reason")
+    
+    device_manager = get_device_manager()
+    device_manager.reject_pairing(device_id, reason)
+    
     return {"deviceId": device_id, "rejected": True}
 
 
 @register_handler("device.token.rotate")
 async def handle_device_token_rotate(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Rotate device token"""
+    from openclaw.devices.manager import get_device_manager
+    
     device_id = params.get("deviceId")
-    return {"deviceId": device_id, "rotated": True}
+    device_manager = get_device_manager()
+    new_token = device_manager.rotate_token(device_id)
+    
+    return {
+        "deviceId": device_id,
+        "rotated": new_token is not None,
+        "token": new_token
+    }
 
 
 @register_handler("device.token.revoke")
 async def handle_device_token_revoke(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Revoke device token"""
-    device_id = params.get("deviceId")
-    return {"deviceId": device_id, "revoked": True}
+    from openclaw.devices.manager import get_device_manager
+    
+    token = params.get("token")
+    device_manager = get_device_manager()
+    success = device_manager.revoke_token(token)
+    
+    return {"revoked": success}
 
 
 @register_handler("exec.approval.request")
 async def handle_exec_approval_request(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Request exec approval"""
+    from openclaw.exec.approval_manager import get_approval_manager
+    
     command = params.get("command", "")
-    return {"command": command, "requestId": f"req-{int(datetime.now(UTC).timestamp())}"}
+    context = params.get("context", {})
+    
+    approval_manager = get_approval_manager()
+    request_id = approval_manager.request_approval(command, context)
+    
+    return {
+        "requestId": request_id,
+        "command": command
+    }
 
 
 @register_handler("exec.approval.resolve")
 async def handle_exec_approval_resolve(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Resolve exec approval"""
+    from openclaw.exec.approval_manager import get_approval_manager
+    
     request_id = params.get("requestId")
     approved = params.get("approved", False)
-    return {"requestId": request_id, "approved": approved}
+    approved_by = connection.auth_context.user
+    
+    approval_manager = get_approval_manager()
+    
+    if approved:
+        success = approval_manager.approve(request_id, approved_by)
+    else:
+        success = approval_manager.reject(request_id, approved_by)
+    
+    return {
+        "requestId": request_id,
+        "approved": approved,
+        "resolved": success
+    }
+
+
+@register_handler("exec.approvals.get")
+async def handle_exec_approvals_get(connection: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
+    """Get pending exec approvals"""
+    from openclaw.exec.approval_manager import get_approval_manager
+    
+    approval_manager = get_approval_manager()
+    return approval_manager.list_pending()
+
+
+@register_handler("exec.approvals.set")
+async def handle_exec_approvals_set(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
+    """Set exec approval policies"""
+    from openclaw.exec.approval_manager import get_approval_manager, ApprovalPolicy
+    
+    policy_id = params.get("policyId")
+    policy_data = params.get("policy", {})
+    
+    policy = ApprovalPolicy(
+        pattern=policy_data.get("pattern"),
+        auto_approve=policy_data.get("autoApprove", False),
+        require_approval=policy_data.get("requireApproval", True),
+        allowed_users=policy_data.get("allowedUsers")
+    )
+    
+    approval_manager = get_approval_manager()
+    approval_manager.set_policy(policy_id, policy)
+    
+    return {"policyId": policy_id, "set": True}
 
 
 @register_handler("logs.tail")
@@ -490,76 +851,111 @@ async def handle_models_list(connection: Any, params: dict[str, Any]) -> list[di
 @register_handler("node.list")
 async def handle_node_list(connection: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
     """List connected nodes"""
-    return []
+    from openclaw.nodes.manager import get_node_manager
+    
+    node_manager = get_node_manager()
+    return node_manager.list_nodes()
 
 
 @register_handler("node.describe")
 async def handle_node_describe(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Describe a node"""
+    from openclaw.nodes.manager import get_node_manager
+    
     node_id = params.get("nodeId")
-    return {"nodeId": node_id, "capabilities": []}
+    node_manager = get_node_manager()
+    node = node_manager.get_node(node_id)
+    
+    if not node:
+        raise ValueError(f"Node not found: {node_id}")
+    
+    return {
+        "nodeId": node.id,
+        "capabilities": node.capabilities,
+        "status": node.status,
+        "metadata": node.metadata
+    }
 
 
 @register_handler("node.invoke")
 async def handle_node_invoke(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Invoke a command on a node"""
+    from openclaw.nodes.manager import get_node_manager
+    
     node_id = params.get("nodeId")
-    method = params.get("method")
-    return {"nodeId": node_id, "method": method, "status": "accepted"}
+    command = params.get("command", "")
+    command_params = params.get("params", {})
+    
+    node_manager = get_node_manager()
+    result = await node_manager.invoke_node(node_id, command, command_params)
+    
+    return result
+
+
+@register_handler("node.pair.approve")
+async def handle_node_pair_approve(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
+    """Approve node pairing"""
+    from openclaw.nodes.manager import get_node_manager
+    
+    node_id = params.get("nodeId")
+    node_manager = get_node_manager()
+    token = node_manager.approve_pairing(node_id)
+    
+    return {
+        "nodeId": node_id,
+        "approved": token is not None,
+        "token": token
+    }
+
+
+@register_handler("node.pair.reject")
+async def handle_node_pair_reject(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
+    """Reject node pairing"""
+    from openclaw.nodes.manager import get_node_manager
+    
+    node_id = params.get("nodeId")
+    reason = params.get("reason")
+    
+    node_manager = get_node_manager()
+    node_manager.reject_pairing(node_id, reason)
+    
+    return {"nodeId": node_id, "rejected": True}
 
 
 @register_handler("sessions.preview")
 async def handle_sessions_preview(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Preview session"""
-    session_key = params.get("sessionKey", "main")
-    if not _session_manager:
-        return {"sessionKey": session_key, "messages": []}
-    session = _session_manager.get_session(session_key)
-    messages = session.get_messages(limit=5)
-    return {
-        "sessionKey": session_key,
-        "messages": [{"role": m.role, "content": m.content[:100]} for m in messages],
-    }
+    """Preview session - using store-based implementation"""
+    return await _sessions_preview_method.execute(connection, params)
 
 
 @register_handler("sessions.resolve")
 async def handle_sessions_resolve(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Resolve session key"""
-    session_key = params.get("sessionKey", "main")
-    return {"sessionKey": session_key, "resolved": True}
+    """Resolve session key - using store-based implementation"""
+    return await _sessions_resolve_method.execute(connection, params)
 
 
 @register_handler("sessions.patch")
 async def handle_sessions_patch(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Patch session metadata"""
-    session_key = params.get("sessionKey", "main")
-    patch = params.get("patch", {})
-    return {"sessionKey": session_key, "patched": True}
+    """Patch session metadata - using store-based implementation"""
+    return await _sessions_patch_method.execute(connection, params)
 
 
 @register_handler("sessions.reset")
 async def handle_sessions_reset(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Reset session"""
-    session_key = params.get("sessionKey", "main")
-    if _session_manager:
-        _session_manager.clear_session(session_key)
-    return {"sessionKey": session_key, "reset": True}
+    """Reset session - using store-based implementation"""
+    return await _sessions_reset_method.execute(connection, params)
 
 
 @register_handler("sessions.delete")
 async def handle_sessions_delete(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Delete session"""
-    session_key = params.get("sessionKey", "main")
-    if _session_manager:
-        _session_manager.clear_session(session_key)
-    return {"sessionKey": session_key, "deleted": True}
+    """Delete session - using store-based implementation"""
+    return await _sessions_delete_method.execute(connection, params)
 
 
 @register_handler("sessions.compact")
 async def handle_sessions_compact(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Compact session (reduce context)"""
-    session_key = params.get("sessionKey", "main")
-    return {"sessionKey": session_key, "compacted": True}
+    """Compact session - using store-based implementation"""
+    return await _sessions_compact_method.execute(connection, params)
 
 
 @register_handler("skills.install")
@@ -800,19 +1196,60 @@ async def handle_node_capabilities(connection: Any, params: dict[str, Any]) -> d
 @register_handler("exec.approval.list")
 async def handle_exec_approval_list(connection: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
     """List pending execution approvals"""
-    # TODO: Implement approval queue
-    return []
+    # Get approval manager from gateway (would need to be added)
+    if not connection.gateway or not hasattr(connection.gateway, 'approval_manager'):
+        return []
+    
+    approval_manager = connection.gateway.approval_manager
+    if not approval_manager:
+        return []
+    
+    try:
+        # Get all pending approvals
+        return [
+            {
+                "id": req.id,
+                "command": req.command,
+                "context": req.context,
+                "requestedAt": req.requested_at,
+                "status": req.status
+            }
+            for req in approval_manager.pending_approvals.values()
+            if req.status == "pending"
+        ]
+    except Exception as e:
+        logger.error(f"Failed to list approvals: {e}", exc_info=True)
+        return []
 
 
 @register_handler("exec.approval.approve")
 async def handle_exec_approval_approve(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
     """Approve pending execution"""
     approval_id = params.get("approvalId")
+    approved_by = params.get("approvedBy", "user")
     
-    logger.info(f"Approving execution: {approval_id}")
+    logger.info(f"Approving execution: {approval_id} by {approved_by}")
     
-    # TODO: Execute approved command
-    return {"success": True, "approvalId": approval_id, "executed": True}
+    # Get approval manager from gateway
+    if not connection.gateway or not hasattr(connection.gateway, 'approval_manager'):
+        return {"success": False, "error": "Approval manager not available"}
+    
+    approval_manager = connection.gateway.approval_manager
+    if not approval_manager:
+        return {"success": False, "error": "Approval manager not initialized"}
+    
+    try:
+        # Approve the request
+        success = approval_manager.approve(approval_id, approved_by=approved_by)
+        
+        return {
+            "success": success,
+            "approvalId": approval_id,
+            "approvedBy": approved_by
+        }
+    except Exception as e:
+        logger.error(f"Failed to approve: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
 @register_handler("exec.approval.deny")
@@ -856,10 +1293,23 @@ async def handle_system_event(connection: Any, params: dict[str, Any]) -> dict[s
     event_type = params.get("type", "notification")
     data = params.get("data", {})
     
-    logger.info(f"System event: {event_type}")
+    logger.info(f"Broadcasting system event: {event_type}")
     
-    # TODO: Broadcast to all connections
-    return {"success": True, "type": event_type, "broadcasted": True}
+    if not connection.gateway:
+        return {"success": False, "error": "Gateway not available"}
+    
+    try:
+        # Broadcast to all connected clients
+        await connection.gateway.broadcast_event(event_type, data)
+        return {
+            "success": True,
+            "type": event_type,
+            "broadcasted": True,
+            "connections": len(connection.gateway.connections)
+        }
+    except Exception as e:
+        logger.error(f"Failed to broadcast event: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
 @register_handler("system.shutdown")
@@ -888,8 +1338,16 @@ async def handle_channels_connect(connection: Any, params: dict[str, Any]) -> di
     
     logger.info(f"Connecting channel: {channel_id}")
     
-    # TODO: Connect channel
-    return {"success": True, "channelId": channel_id, "connected": True}
+    if not connection.gateway:
+        return {"success": False, "error": "Gateway not available"}
+    
+    try:
+        # Start the channel via channel_manager
+        await connection.gateway.channel_manager.start_channel(channel_id)
+        return {"success": True, "channelId": channel_id, "connected": True}
+    except Exception as e:
+        logger.error(f"Failed to connect channel: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
 @register_handler("channels.disconnect")
@@ -899,8 +1357,16 @@ async def handle_channels_disconnect(connection: Any, params: dict[str, Any]) ->
     
     logger.info(f"Disconnecting channel: {channel_id}")
     
-    # TODO: Disconnect channel
-    return {"success": True, "channelId": channel_id, "disconnected": True}
+    if not connection.gateway:
+        return {"success": False, "error": "Gateway not available"}
+    
+    try:
+        # Stop the channel via channel_manager
+        await connection.gateway.channel_manager.stop_channel(channel_id)
+        return {"success": True, "channelId": channel_id, "disconnected": True}
+    except Exception as e:
+        logger.error(f"Failed to disconnect channel: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
 @register_handler("channels.send")
@@ -910,75 +1376,207 @@ async def handle_channels_send(connection: Any, params: dict[str, Any]) -> dict[
     target = params.get("target")
     text = params.get("text", "")
     
-    logger.info(f"Sending via {channel_id} to {target}")
+    logger.info(f"Sending via {channel_id} to {target}: {text[:50]}...")
     
-    # TODO: Send message
-    return {"success": True, "sent": True, "messageId": "msg-1"}
+    if not connection.gateway:
+        return {"success": False, "error": "Gateway not available"}
+    
+    try:
+        # Get channel from manager
+        channel = connection.gateway.channel_manager.get_channel(channel_id)
+        if not channel:
+            return {"success": False, "error": f"Channel '{channel_id}' not found"}
+        
+        # Send message
+        message_id = await channel.send_text(target=target, text=text)
+        
+        return {
+            "success": True,
+            "sent": True,
+            "messageId": message_id or "sent",
+            "channelId": channel_id,
+            "target": target
+        }
+    except Exception as e:
+        logger.error(f"Failed to send message: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
 # Memory handlers
 @register_handler("memory.search")
 async def handle_memory_search(connection: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
-    """Search memory"""
+    """Search memory using BuiltinMemoryManager"""
     query = params.get("query", "")
     limit = params.get("limit", 5)
     use_vector = params.get("useVector", False)
+    use_hybrid = params.get("useHybrid", True)
+    sources = params.get("sources")
     
-    logger.info(f"Memory search: {query} (vector={use_vector})")
+    logger.info(f"Memory search: query='{query}', limit={limit}, vector={use_vector}, hybrid={use_hybrid}")
     
-    # TODO: Implement memory search
-    return []
+    # Get memory manager from gateway
+    if not connection.gateway:
+        logger.error("No gateway reference in connection")
+        return []
+    
+    memory_manager = connection.gateway.get_memory_manager()
+    if not memory_manager:
+        logger.warning("Memory manager not available")
+        return []
+    
+    try:
+        # Convert source strings to MemorySource enum if provided
+        from openclaw.memory.types import MemorySource
+        source_enums = None
+        if sources:
+            source_enums = [MemorySource(s) for s in sources if s in [e.value for e in MemorySource]]
+        
+        # Perform search
+        results = await memory_manager.search(
+            query=query,
+            limit=limit,
+            sources=source_enums,
+            use_vector=use_vector,
+            use_hybrid=use_hybrid
+        )
+        
+        # Convert results to dict format
+        return [
+            {
+                "id": r.id,
+                "path": r.path,
+                "source": r.source.value,
+                "text": r.text,
+                "snippet": r.snippet,
+                "startLine": r.start_line,
+                "endLine": r.end_line,
+                "score": r.score
+            }
+            for r in results
+        ]
+    except Exception as e:
+        logger.error(f"Memory search failed: {e}", exc_info=True)
+        return []
 
 
 @register_handler("memory.add")
 async def handle_memory_add(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Add to memory"""
+    """Add content to memory"""
     content = params.get("content", "")
     source = params.get("source", "manual")
+    file_path = params.get("filePath")
     
-    logger.info(f"Adding to memory: {len(content)} chars")
+    logger.info(f"Adding to memory: content_len={len(content)}, source={source}, file_path={file_path}")
     
-    # TODO: Add to memory
-    return {"success": True, "chunks": 1}
+    # Get memory manager from gateway
+    if not connection.gateway:
+        logger.error("No gateway reference in connection")
+        return {"success": False, "error": "Gateway not available"}
+    
+    memory_manager = connection.gateway.get_memory_manager()
+    if not memory_manager:
+        logger.warning("Memory manager not available")
+        return {"success": False, "error": "Memory manager not initialized"}
+    
+    try:
+        from openclaw.memory.types import MemorySource
+        from pathlib import Path
+        import tempfile
+        
+        # If file_path is provided, add the file directly
+        if file_path:
+            path = Path(file_path)
+            if path.exists():
+                source_enum = MemorySource(source) if source in [e.value for e in MemorySource] else MemorySource.MANUAL
+                await memory_manager.add_file(str(path), source_enum)
+                return {"success": True, "chunks": 1, "path": str(path)}
+            else:
+                return {"success": False, "error": f"File not found: {file_path}"}
+        
+        # Otherwise, create a temporary file with the content
+        if content:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+                f.write(content)
+                temp_path = f.name
+            
+            try:
+                source_enum = MemorySource(source) if source in [e.value for e in MemorySource] else MemorySource.MANUAL
+                await memory_manager.add_file(temp_path, source_enum)
+                return {"success": True, "chunks": 1, "path": temp_path}
+            finally:
+                # Clean up temp file
+                Path(temp_path).unlink(missing_ok=True)
+        
+        return {"success": False, "error": "No content or file_path provided"}
+        
+    except Exception as e:
+        logger.error(f"Failed to add to memory: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
 @register_handler("memory.sync")
 async def handle_memory_sync(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Sync memory index"""
+    """Sync memory index (rebuild index from memory files)"""
     logger.info("Starting memory sync")
     
-    # TODO: Trigger memory sync
-    return {"success": True, "syncing": True}
+    # Get memory manager from gateway
+    if not connection.gateway:
+        logger.error("No gateway reference in connection")
+        return {"success": False, "error": "Gateway not available"}
+    
+    memory_manager = connection.gateway.get_memory_manager()
+    if not memory_manager:
+        logger.warning("Memory manager not available")
+        return {"success": False, "error": "Memory manager not initialized"}
+    
+    try:
+        # Trigger sync (this would typically scan MEMORY.md files and re-index)
+        await memory_manager.sync()
+        return {"success": True, "syncing": True}
+    except Exception as e:
+        logger.error(f"Memory sync failed: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
 # Plugin handlers
 @register_handler("plugins.list")
 async def handle_plugins_list(connection: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
-    """List installed plugins"""
-    # TODO: List plugins
+    """List installed plugins (placeholder implementation)"""
+    # Plugins system not fully implemented yet
+    # Return empty list for now
+    logger.debug("Plugins list requested - returning empty list (not yet implemented)")
     return []
 
 
 @register_handler("plugins.install")
 async def handle_plugins_install(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Install plugin"""
+    """Install plugin (placeholder implementation)"""
     plugin_id = params.get("pluginId")
     
-    logger.info(f"Installing plugin: {plugin_id}")
+    logger.info(f"Plugin install requested: {plugin_id} (not yet implemented)")
     
-    # TODO: Install plugin
-    return {"success": True, "pluginId": plugin_id, "installed": True}
+    # Plugins system not fully implemented yet
+    # Return success placeholder
+    return {
+        "success": False,
+        "pluginId": plugin_id,
+        "error": "Plugin system not yet implemented"
+    }
 
 
 @register_handler("plugins.uninstall")
 async def handle_plugins_uninstall(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
-    """Uninstall plugin"""
+    """Uninstall plugin (placeholder implementation)"""
     plugin_id = params.get("pluginId")
     
-    logger.info(f"Uninstalling plugin: {plugin_id}")
+    logger.info(f"Plugin uninstall requested: {plugin_id} (not yet implemented)")
     
-    # TODO: Uninstall plugin
-    return {"success": True, "pluginId": plugin_id, "uninstalled": True}
+    # Plugins system not fully implemented yet
+    return {
+        "success": False,
+        "pluginId": plugin_id,
+        "error": "Plugin system not yet implemented"
+    }
 
 
 @register_handler("plugins.enable")

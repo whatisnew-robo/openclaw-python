@@ -1,7 +1,7 @@
 """Control UI assets management
 
 Ensures Control UI assets are built and ready.
-Matches TypeScript openclaw/src/infra/control-ui-assets.ts
+Matches TypeScript openclaw/src/infra/ui-assets.ts
 """
 from __future__ import annotations
 

@@ -1,10 +1,12 @@
 """Discord channel implementation"""
+from __future__ import annotations
+
 
 import asyncio
 import logging
 from typing import Any
 
-from .base import ChannelCapabilities, ChannelPlugin, InboundMessage
+from ..base import ChannelCapabilities, ChannelPlugin, InboundMessage
 
 logger = logging.getLogger(__name__)
 

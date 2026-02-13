@@ -1,6 +1,8 @@
 """
 Enhanced Telegram channel with connection management
 """
+from __future__ import annotations
+
 
 import asyncio
 import logging

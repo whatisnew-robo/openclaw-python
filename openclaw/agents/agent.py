@@ -5,6 +5,7 @@ and provides a clean interface for agent interactions.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Callable
 
@@ -86,29 +87,55 @@ class Agent:
         self,
         message: str | list[str],
         system_prompt: str | None = None,
+        images: list[str] | None = None,
     ) -> list[Any]:
         """
-        Send prompt to agent and get response
+        Send prompt to agent and get response with optional image attachments
         
         Args:
             message: User message or list of messages
             system_prompt: Optional system prompt override
+            images: Optional list of image URLs or file paths
             
         Returns:
             List of messages in conversation
         """
+        from .agent_loop import AgentMessage
+        
         # Convert single message to list
         prompts = [message] if isinstance(message, str) else message
         
         # Use instance system prompt if not overridden
         sys_prompt = system_prompt or self.system_prompt
         
-        # Run agent loop
-        messages = await self.loop.agent_loop(
-            prompts=prompts,
-            system_prompt=sys_prompt,
-            model=self.model
-        )
+        # If images provided, add them to the first message
+        if images and prompts:
+            # Replace first prompt with AgentMessage that includes images
+            first_msg = AgentMessage(
+                role="user",
+                content=prompts[0],
+                images=images
+            )
+            # Store in state
+            self.loop.state.messages = []
+            if sys_prompt:
+                self.loop.state.messages.append(AgentMessage(
+                    role="system",
+                    content=sys_prompt
+                ))
+            self.loop.state.messages.append(first_msg)
+            for p in prompts[1:]:
+                self.loop.state.messages.append(AgentMessage(role="user", content=p))
+            
+            # Run loop continuation
+            messages = await self.loop.agent_loop_continue()
+        else:
+            # Run agent loop normally
+            messages = await self.loop.agent_loop(
+                prompts=prompts,
+                system_prompt=sys_prompt,
+                model=self.model
+            )
         
         return messages
     
@@ -279,6 +306,49 @@ class Agent:
         """Clear conversation history"""
         self.loop.state.messages = []
         self.loop.state.turn_number = 0
+    
+    async def wait_for_idle(self) -> None:
+        """
+        Wait until agent completes all operations
+        
+        Useful for synchronizing with agent execution in tests or scripts.
+        Matches TypeScript Agent.waitForIdle()
+        """
+        # Wait while agent is streaming or has pending tool calls
+        while self.loop.state.is_streaming or self.loop.state.pending_tool_calls:
+            await asyncio.sleep(0.1)
+        
+        # Also wait for queues to be empty
+        while self.loop.state.steering_queue or self.loop.state.followup_queue:
+            await asyncio.sleep(0.1)
+    
+    async def compact(self) -> None:
+        """
+        Manually trigger context compaction
+        
+        Summarizes conversation history to reduce context window usage.
+        Matches TypeScript Agent.compact()
+        """
+        from .compaction.compactor import compact_messages
+        
+        try:
+            logger.info("Starting manual compaction")
+            
+            # Compact messages using compactor
+            compacted = await compact_messages(
+                messages=self.loop.state.messages,
+                provider=self.provider,
+                model=self.model
+            )
+            
+            # Replace messages with compacted version
+            self.loop.state.messages = compacted
+            
+            logger.info(f"Compaction complete: {len(compacted)} messages")
+        
+        except Exception as e:
+            logger.error(f"Compaction failed: {e}", exc_info=True)
+            # Don't fail the agent, just log error
     
     def __repr__(self) -> str:
         return f"Agent(model={self.model}, tools={len(self.tools)}, messages={len(self.messages)})"

@@ -4,6 +4,8 @@ Handles migration from older config formats:
 - ~/.clawdbot/clawdbot.json -> ~/.openclaw/openclaw.json
 - ~/.moltbot/moltbot.json -> ~/.openclaw/openclaw.json
 """
+from __future__ import annotations
+
 
 import json
 import logging

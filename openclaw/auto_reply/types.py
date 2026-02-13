@@ -21,13 +21,13 @@ class MessageType(str, Enum):
 class InboundMessage:
     """Inbound message from a channel"""
     
-    # Message identification
+    # Required fields (no defaults)
     message_id: str
     channel_id: str
-    thread_id: str | None = None
-    
-    # Sender information
     sender_id: str
+    
+    # Optional fields (with defaults)
+    thread_id: str | None = None
     sender_name: str | None = None
     
     # Message content

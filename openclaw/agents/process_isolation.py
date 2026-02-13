@@ -1,7 +1,7 @@
 """Agent process isolation
 
 Manages isolated agent processes for better resource control.
-Provides真正的进程隔离 using multiprocessing.
+Provides real process isolation using multiprocessing.
 """
 from __future__ import annotations
 
