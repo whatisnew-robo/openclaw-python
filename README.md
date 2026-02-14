@@ -1,27 +1,39 @@
-# OpenClaw Python 🦞
+# OpenXJarvis 🦞
 
-> **A Python port of OpenClaw - Your personal AI assistant platform**
+> **OpenClaw is great, but I also need Python! J.A.R.V.I.S is coming.**  
+> _A full-featured Python implementation of the OpenClaw AI assistant platform_
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-OpenClaw Python is a complete Python implementation of the OpenClaw personal AI assistant platform. Currently supports Telegram with additional channels under active development.
+**OpenXJarvis** (OpenClaw Python and Beyond) is a complete Python port of OpenClaw, connecting messaging channels (Telegram, Discord, Slack) with AI models (Claude, GPT, Gemini). Built with Python's strengths for clarity and maintainability—because Python's what you need to get through!
 
 ## 🚧 Current Status
 
-**✅ Working:**
-- Telegram channel integration
+**✅ Working Now:**
+- Telegram channel integration (fully operational)
 - Core agent runtime with tool execution
 - 24 built-in tools (file operations, web search, bash, etc.)
 - 56+ skills for specialized tasks
 - Workspace management with personality files (SOUL.md, AGENTS.md, etc.)
 - Multi-model support (Claude, GPT, Gemini)
 
-**🔨 In Development:**
+**🔨 Coming Soon (J.A.R.V.I.S Evolution):**
 - Discord, Slack, and WhatsApp channels
 - Web Control UI
 - Cron scheduler
-- Additional automation features
+- Voice integration
+- Advanced automation features
+
+## ✨ Features (still not completed, but closer)
+
+- 🤖 **Multi-Model Support**: Anthropic Claude, OpenAI GPT, Google Gemini, AWS Bedrock, Ollama
+- 💬 **Multi-Channel**: Telegram ✅ (Discord, Slack, WhatsApp coming soon)
+- ⏰ **Cron Scheduler**: Set reminders, recurring tasks ("wake me at 7am", "daily stock update")
+- 🔧 **24+ Built-in Tools**: File ops, web search, bash, browser automation, memory search
+- 🎓 **56+ Skills**: Modular extensions for specialized knowledge and workflows
+- 🌐 **Web Control UI**: Browser-based interface (in development)
+- 🔐 **Security**: Comprehensive permission management and sandboxing
 
 ## 🚀 Quick Start
 
@@ -39,7 +51,7 @@ OpenClaw Python is a complete Python implementation of the OpenClaw personal AI 
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone repository
-git clone https://github.com/openjavis/openclaw-python.git
+git clone https://github.com/openxjarvis/openclaw-python.git
 cd openclaw-python
 
 # Install dependencies
@@ -153,7 +165,7 @@ uv run openclaw start --port 18789 --telegram
 
 ## 🏗️ Architecture
 
-OpenClaw Python follows a modular architecture:
+OpenXJarvis follows a modular architecture:
 
 ```
 openclaw/
@@ -241,19 +253,23 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 This is a Python port of the original [OpenClaw](https://github.com/openjavis/openclaw) TypeScript project. Built with Python for clarity, maintainability, and ecosystem compatibility.
 
+**OpenXJarvis** is evolving toward J.A.R.V.I.S - Just A Rather Very Intelligent System. Stay tuned!
+
 ## ⚠️ Important Notes
 
-- **Telegram Only**: Currently only the Telegram channel is fully functional. Other channels are under active development.
-- **Active Development**: This project is rapidly evolving. Expect frequent updates.
+- **Telegram Ready**: Currently Telegram channel is fully functional. Other channels are under active development.
+- **Active Development**: This project is rapidly evolving. Expect frequent updates as we build toward the full J.A.R.V.I.S vision.
 - **Security**: Review the SOUL.md and AGENTS.md files in your workspace to understand your agent's boundaries and permissions.
 - **API Costs**: Be aware of API usage costs from your chosen LLM provider.
 
 ## 🔗 Links
 
 - [OpenClaw (TypeScript)](https://github.com/openjavis/openclaw)
-- [Issue Tracker](https://github.com/openjavis/openclaw-python/issues)
+- [Issue Tracker](https://github.com/openxjarvis/openclaw-python/issues)
 - [Telegram BotFather](https://t.me/botfather)
 
 ---
 
-Built with 🦞 by the OpenClaw community
+**Status**: Telegram Ready • J.A.R.V.I.S Coming Soon  
+**Python**: 3.11+ required, 3.12+ recommended  
+Built with 🦞 by the OpenXJarvis community
