@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..config.loader import load_config, save_config
-from ..config.schema import ClawdbotConfig, AgentConfig, GatewayConfig, ChannelsConfig
+from ..config.schema import ClawdbotConfig, AgentConfig, GatewayConfig, ChannelsConfig, AuthConfig
 from .auth import configure_auth, check_env_api_key
 from .config import configure_telegram_enhanced, configure_discord_enhanced, configure_agent
 
@@ -56,12 +56,13 @@ async def run_onboarding_wizard(config: Optional[dict] = None, workspace_dir: Op
     
     # Step 3: Load or create config
     try:
-        existing_config = load_config()
+        existing_config_dict = load_config(as_dict=True)
         print("\n✓ Found existing configuration")
         
         if mode == "quickstart":
             print("QuickStart mode: Using existing configuration as base")
-            claw_config = existing_config
+            # Convert dict to ClawdbotConfig object
+            claw_config = ClawdbotConfig(**existing_config_dict) if existing_config_dict else ClawdbotConfig()
         else:
             action = _prompt_config_action()
             if action == "reset":
@@ -69,7 +70,8 @@ async def run_onboarding_wizard(config: Optional[dict] = None, workspace_dir: Op
                 claw_config = ClawdbotConfig()
             elif action == "modify":
                 print("Modifying existing configuration...")
-                claw_config = existing_config
+                # Convert dict to ClawdbotConfig object
+                claw_config = ClawdbotConfig(**existing_config_dict) if existing_config_dict else ClawdbotConfig()
             else:  # keep
                 print("Keeping existing configuration...")
                 return {"completed": True, "skipped": False, "kept_existing": True}
@@ -102,10 +104,18 @@ async def run_onboarding_wizard(config: Optional[dict] = None, workspace_dir: Op
             claw_config.gateway = GatewayConfig()
         claw_config.gateway.port = gateway_config.get("port", 18789)
         claw_config.gateway.bind = gateway_config.get("bind", "loopback")
-        if "auth_token" in gateway_config:
-            claw_config.gateway.auth_token = gateway_config["auth_token"]
-        if "auth_password" in gateway_config:
-            claw_config.gateway.auth_password = gateway_config["auth_password"]
+        
+        # Handle authentication properly
+        if "auth_token" in gateway_config or "auth_password" in gateway_config:
+            if not claw_config.gateway.auth:
+                claw_config.gateway.auth = AuthConfig()
+            
+            if "auth_token" in gateway_config:
+                claw_config.gateway.auth.token = gateway_config["auth_token"]
+                claw_config.gateway.auth.mode = "token"
+            if "auth_password" in gateway_config:
+                claw_config.gateway.auth.password = gateway_config["auth_password"]
+                claw_config.gateway.auth.mode = "password"
     
     # Step 7: Channels configuration
     channels_config = await _configure_channels(mode)
@@ -156,15 +166,28 @@ async def run_onboarding_wizard(config: Optional[dict] = None, workspace_dir: Op
     print("🎉 Onboarding Complete!")
     print("=" * 80)
     print("\nNext steps:")
-    print("  1. Start the Gateway:")
-    print("     $ openclaw gateway start")
-    print("\n  2. Connect a channel (if configured):")
+    print("  1. Install the Gateway service:")
+    print("     $ uv run openclaw gateway install")
+    print("\n  2. Start the Gateway:")
+    print("     $ uv run openclaw gateway start")
+    print("\n  3. Check Gateway status:")
+    print("     $ uv run openclaw gateway status")
+    print("\n  4. Connect a channel (if configured):")
     if "telegram" in (channels_config or {}):
         print("     - Open Telegram and message your bot")
+        print("     - Check bot status: uv run openclaw channels list")
     if "discord" in (channels_config or {}):
         print("     - Invite your Discord bot to a server")
-    print("\n  3. Or use the CLI:")
-    print("     $ openclaw chat \"Hello!\"")
+        print("     - Check bot status: uv run openclaw channels list")
+    print("\n  5. Use the CLI:")
+    print("     $ uv run openclaw chat \"Hello!\"")
+    print("\n  6. Useful commands:")
+    print("     - View channels:     uv run openclaw channels list")
+    print("     - View cron jobs:    uv run openclaw cron list")
+    print("     - View logs:         uv run openclaw gateway logs")
+    print("     - Stop gateway:      uv run openclaw gateway stop")
+    print("\n  7. Configuration file:")
+    print("     ~/.openclaw/config.json")
     print("\n" + "=" * 80 + "\n")
     
     logger.info("Onboarding wizard complete")

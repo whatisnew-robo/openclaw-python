@@ -6,55 +6,67 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ..agents.providers import LLMProvider
-    from ..agents.session import SessionManager
-    from ..agents.tools.base import AgentTool
-    from ..channels.base import BaseChannel
     from ..cron import CronService
     from ..cron.types import CronJob
+    from .types import GatewayDeps, GatewayCronState, BroadcastFn
 
 logger = logging.getLogger(__name__)
 
 
 async def build_gateway_cron_service(
-    config: dict[str, Any],
-    provider: LLMProvider,
-    tools: list[AgentTool],
-    session_manager: SessionManager,
-    channel_registry: dict[str, BaseChannel],
-    broadcast: Callable[[str, Any], None] | None = None,
-) -> CronService:
+    config: dict[str, Any] | Any,
+    deps: 'GatewayDeps',
+    broadcast: 'BroadcastFn',
+) -> 'GatewayCronState':
     """
     Build and initialize cron service for Gateway
+    
+    Aligned with TypeScript buildGatewayCronService()
     
     This function:
     1. Resolves store path
     2. Creates service dependencies
-    3. Initializes CronService
-    4. Loads existing jobs
-    5. Starts timer
+    3. Initializes CronService with callbacks
+    4. Loads existing jobs from store
+    5. Prepares service for start (start called separately)
     
     Args:
-        config: Gateway configuration
-        provider: LLM provider
-        tools: Available tools
-        session_manager: Session manager
-        channel_registry: Channel registry
-        broadcast: Event broadcast callback
+        config: Gateway configuration (dict or ClawdbotConfig object)
+        deps: Gateway dependencies (provider, tools, session_manager, etc.)
+        broadcast: Event broadcast callback (required)
         
     Returns:
-        Initialized CronService
+        GatewayCronState with cron service, store path, and enabled flag
     """
     from ..cron import CronService
     from ..cron.store import CronStore
     from ..cron.isolated_agent.run import run_isolated_agent_turn
     from ..cron.isolated_agent.delivery import deliver_result
+    from .types import GatewayCronState
+    import os
+    
+    # Handle both dict and Pydantic config objects
+    if config is None:
+        # No config provided, use defaults
+        config_dict = {}
+    elif hasattr(config, 'model_dump'):
+        # Pydantic model
+        config_dict = config.model_dump()
+    elif hasattr(config, '__dict__'):
+        # Regular object
+        config_dict = config.__dict__
+    elif isinstance(config, dict):
+        # Already a dict
+        config_dict = config
+    else:
+        # Fallback to empty dict
+        config_dict = {}
     
     # Resolve store path
-    cron_config = config.get("cron", {})
+    cron_config = config_dict.get("cron", {}) if isinstance(config_dict, dict) else {}
     store_path_str = cron_config.get("store", "~/.openclaw/cron/jobs.json")
     
     if store_path_str.startswith("~"):
@@ -67,14 +79,18 @@ async def build_gateway_cron_service(
     logger.info(f"Cron store path: {store_path}")
     
     # Check if cron is enabled
-    cron_enabled = cron_config.get("enabled", True)
+    cron_enabled = os.getenv("OPENCLAW_SKIP_CRON") != "1" and cron_config.get("enabled", True)
     
     if not cron_enabled:
         logger.info("Cron service is disabled")
-        # Return disabled service
+        # Return disabled service state
         service = CronService()
         service._enabled = False
-        return service
+        return GatewayCronState(
+            cron=service,
+            store_path=store_path,
+            enabled=False
+        )
     
     # Create store
     store = CronStore(store_path)
@@ -92,8 +108,8 @@ async def build_gateway_cron_service(
             # Resolve main session for the agent
             session_key = f"{agent_id}-main"
             
-            if session_manager:
-                session = session_manager.get_session(session_key)
+            if deps.session_manager:
+                session = deps.session_manager.get_session(session_key)
                 if session:
                     # Add system message to session
                     session.add_system_message(text)
@@ -114,13 +130,13 @@ async def build_gateway_cron_service(
         """Run isolated agent for cron job"""
         try:
             # Get sessions directory
-            sessions_dir = getattr(session_manager, "sessions_dir", Path.home() / ".openclaw" / "sessions")
+            sessions_dir = getattr(deps.session_manager, "sessions_dir", Path.home() / ".openclaw" / "sessions")
             
             # Run isolated agent turn
             result = await run_isolated_agent_turn(
                 job=job,
-                provider=provider,
-                tools=tools,
+                provider=deps.provider,
+                tools=deps.tools,
                 sessions_dir=sessions_dir,
                 system_prompt=None,  # TODO: Get from config
             )
@@ -131,7 +147,7 @@ async def build_gateway_cron_service(
                     delivery_success = await deliver_result(
                         job=job,
                         result=result,
-                        channel_registry=channel_registry,
+                        get_channel_manager=deps.get_channel_manager,  # Lazy access
                         session_history=None,  # TODO: Get from session
                     )
                     result["delivered"] = delivery_success
@@ -177,18 +193,18 @@ async def build_gateway_cron_service(
                 """Execute heartbeat by running agent turn"""
                 session_key = f"{agent_id_inner}-main"
                 
-                if not session_manager:
+                if not deps.session_manager:
                     logger.error("Session manager not available")
                     return None
                 
-                session = session_manager.get_session(session_key)
+                session = deps.session_manager.get_session(session_key)
                 if not session:
                     logger.error(f"Session '{session_key}' not found")
                     return None
                 
                 # Run agent turn with heartbeat prompt
                 response_text = ""
-                async for event in provider.prompt(
+                async for event in deps.provider.prompt(
                     messages=[{"role": "user", "content": prompt}],
                     tools=None
                 ):
@@ -226,10 +242,10 @@ async def build_gateway_cron_service(
     
     # Define event callback
     def on_event(event: dict[str, Any]) -> None:
-        """Handle cron events"""
+        """Handle cron events and broadcast to WebSocket clients"""
         try:
-            if broadcast:
-                broadcast("cron", event)
+            # Broadcast to WebSocket clients (dropIfSlow to avoid blocking)
+            broadcast("cron", event, {"dropIfSlow": True})
             
             # Log important events
             action = event.get("action")
@@ -245,6 +261,25 @@ async def build_gateway_cron_service(
                 if status == "error":
                     error = event.get("error", "Unknown error")
                     logger.error(f"Cron job error: {job_id}, {error}")
+                
+                # Append to run log
+                if store_path:
+                    log_path = store_path.parent / "logs" / f"{job_id}.jsonl"
+                    try:
+                        from ..cron.store import CronRunLog
+                        run_log = CronRunLog(log_path)
+                        run_log.append({
+                            "ts": event.get("runAtMs", 0),
+                            "jobId": job_id,
+                            "action": "finished",
+                            "status": status,
+                            "error": event.get("error"),
+                            "summary": event.get("summary"),
+                            "durationMs": duration_ms,
+                            "nextRunAtMs": event.get("nextRunAtMs"),
+                        })
+                    except Exception as e:
+                        logger.warning(f"Failed to append run log: {e}")
             
         except Exception as e:
             logger.error(f"Error handling cron event: {e}", exc_info=True)
@@ -258,13 +293,10 @@ async def build_gateway_cron_service(
         on_event=on_event,
     )
     
-    # Add dependency references
+    # Add dependency references for debugging/inspection
     service._store = store
     service._cron_enabled = cron_enabled
-    service._provider = provider
-    service._tools = tools
-    service._session_manager = session_manager
-    service._channel_registry = channel_registry
+    service._deps = deps
     
     # Load jobs from store
     logger.info("Loading cron jobs from store...")
@@ -277,13 +309,15 @@ async def build_gateway_cron_service(
         # Just register the job
         service.jobs[job.id] = job
     
-    # Start service
-    logger.info("Starting cron service...")
-    service.start()
+    # NOTE: Service start is deferred until after channel manager is ready
+    # Bootstrap will call service.start() after creating channel_manager
+    logger.info(f"✅ Cron service initialized with {len(jobs)} jobs (start deferred)")
     
-    logger.info(f"✅ Cron service started with {len(jobs)} jobs")
-    
-    return service
+    return GatewayCronState(
+        cron=service,
+        store_path=store_path,
+        enabled=cron_enabled
+    )
 
 
 def resolve_cron_store_path(config: dict[str, Any]) -> Path:

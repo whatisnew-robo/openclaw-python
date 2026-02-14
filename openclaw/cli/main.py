@@ -405,5 +405,64 @@ def main():
         sys.exit(1)
 
 
+@app.command()
+def cleanup(
+    ports: str = typer.Option("18789,8080", help="Comma-separated list of ports to free"),
+    kill_all: bool = typer.Option(False, "--kill-all", "-k", help="Kill all openclaw processes"),
+):
+    """
+    Clean up ports and processes.
+    
+    Useful when gateway fails to stop properly and ports remain occupied.
+    """
+    import subprocess
+    
+    console.print("[cyan]🧹 Cleaning up OpenClaw processes and ports...[/cyan]\n")
+    
+    # Parse ports
+    port_list = [p.strip() for p in ports.split(",") if p.strip()]
+    
+    # Kill processes on specified ports
+    if port_list:
+        ports_str = ",".join(port_list)
+        console.print(f"   Freeing ports: [yellow]{ports_str}[/yellow]")
+        
+        try:
+            # Use lsof to find and kill processes
+            cmd = f"lsof -ti:{ports_str} | xargs kill -9 2>/dev/null || true"
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                console.print(f"   [green]✓[/green] Freed ports: {ports_str}")
+            else:
+                console.print(f"   [dim]ℹ No processes found on ports: {ports_str}[/dim]")
+        except Exception as e:
+            console.print(f"   [red]⚠ Failed to free ports: {e}[/red]", style="red")
+    
+    # Kill all openclaw processes
+    if kill_all:
+        console.print("   Killing all openclaw processes...")
+        try:
+            cmd = "ps aux | grep -E '(openclaw|uv run openclaw)' | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null || true"
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                console.print("   [green]✓[/green] Killed all openclaw processes")
+            else:
+                console.print("   [dim]ℹ No openclaw processes found[/dim]")
+        except Exception as e:
+            console.print(f"   [red]⚠ Failed to kill processes: {e}[/red]")
+    
+    console.print("\n[green]✓ Cleanup complete[/green]")
+
+
 if __name__ == "__main__":
     main()

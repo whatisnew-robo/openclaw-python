@@ -4,138 +4,41 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-pip-log.txt
-pip-delete-this-directory.txt
+dist/
+build/
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
-.tox/
-.nox/
-coverage.xml
-*.cover
-.hypothesis/
-
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-.venv
 
 # IDE
 .vscode/
 .idea/
-.cursor/
-.clawdbot/
 *.swp
 *.swo
 *~
-.DS_Store
 
-# Environment variables (IMPORTANT!)
+# Environment
 .env
-.env.local
-.env.*.local
+.venv
+venv/
+ENV/
 
-# Credentials and secrets
-credentials/
-*.pem
-*.key
-*.crt
-*.p12
-
-# Session data
-.sessions/
-sessions/
-*.session
-
-# Logs
-*.log
-logs/
-
-# Database
+# OpenClaw runtime
+.openclaw/
 *.db
 *.sqlite
 *.sqlite3
 
-# Temporary files
-tmp/
-temp/
+# Temporary
 *.tmp
-# Exclude temporary test/list scripts in root, but keep tests/ directory
-/test_*.py
-/list_*.py
+*.temp
+*.log
 
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# macOS
+.DS_Store
 
-# Ruff
-.ruff_cache/
-
-# OpenClaw specific
-workspace/
-.openclaw/
-
-# Documentation
-# All docs/ content is for local development only
-# Only README.md, CHANGELOG.md, CONTRIBUTING.md should be in version control
-docs/
-*.md
-!README.md
-!CHANGELOG.md
-!CONTRIBUTING.md
-!CONTRIBUTORS.md
-
-# Temporary analysis and implementation reports (keep locally, don't push)
-*_ANALYSIS.md
-*_SUMMARY.md
-REFACTOR_*.md
-AUTH_ID_*.md
-认证与*.md
-实现报告*.md
-分析报告*.md
-validate_*.py
-完整实现总结.md
-设备配对和安全机制说明.md
-
-# Keep these implementation docs (提交到 GitHub)
-!IMAGE_PROCESSING_IMPLEMENTATION.md
-!INTEGRATION_COMPLETE.md
-
-# Manual test scripts (keep locally, don't push)
-tests/manual/
-
-# Monitoring and maintenance scripts (keep locally)
-monitor_logs.sh
-check_service.sh
-restart_service.sh
-view_conversations.sh
-MONITORING_GUIDE.md
-SSH_SETUP_GUIDE.md
-
-# Test files
-random_image.jpg
-*.jpg
-*.png
-control-ui/node_modules/
-src/
+# Terminal output
+terminals/

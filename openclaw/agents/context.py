@@ -749,6 +749,103 @@ def inject_history_images_into_messages(
     return did_mutate
 
 
+# Context management classes for backward compatibility
+class ContextWindow:
+    """
+    Context window management for agent sessions.
+    
+    Tracks token usage and manages context window limits.
+    """
+    
+    def __init__(self, max_tokens: int = 32000, current_tokens: int = 0):
+        # Handle various input types gracefully
+        try:
+            self.max_tokens = int(max_tokens) if max_tokens else 32000
+        except (ValueError, TypeError):
+            self.max_tokens = 32000  # Fallback to default
+            
+        try:
+            self.current_tokens = int(current_tokens) if current_tokens else 0
+        except (ValueError, TypeError):
+            self.current_tokens = 0  # Fallback to default
+            
+        self.total_tokens = self.max_tokens
+        self.should_compress = self.current_tokens > int(self.max_tokens * 0.8)  # Compress at 80%
+    
+    def add_tokens(self, count: int) -> None:
+        """Add tokens to current count"""
+        self.current_tokens += int(count)
+        self.should_compress = self.current_tokens > int(self.max_tokens * 0.8)
+    
+    def reset(self) -> None:
+        """Reset token count"""
+        self.current_tokens = 0
+        self.should_compress = False
+    
+    def available(self) -> int:
+        """Get available tokens"""
+        return max(0, self.max_tokens - self.current_tokens)
+    
+    def is_full(self) -> bool:
+        """Check if context window is full"""
+        return self.current_tokens >= self.max_tokens
+
+
+class ContextManager:
+    """
+    Context manager for agent runtime.
+    
+    Manages message history and context windows across sessions.
+    """
+    
+    def __init__(self, default_window_size: int = 32000):
+        self.default_window_size = default_window_size
+        self.windows: dict[str, ContextWindow] = {}
+    
+    def get_window(self, session_id: str) -> ContextWindow:
+        """Get or create context window for session"""
+        if session_id not in self.windows:
+            self.windows[session_id] = ContextWindow(self.default_window_size)
+        return self.windows[session_id]
+    
+    def reset_window(self, session_id: str) -> None:
+        """Reset context window for session"""
+        if session_id in self.windows:
+            self.windows[session_id].reset()
+    
+    def clear_session(self, session_id: str) -> None:
+        """Clear session context"""
+        if session_id in self.windows:
+            del self.windows[session_id]
+    
+    def check_context(self, token_count: int, max_tokens: int | None = None) -> ContextWindow:
+        """
+        Check context window status.
+        
+        Args:
+            token_count: Current token count (can be int or list of messages)
+            max_tokens: Optional max tokens override
+            
+        Returns:
+            ContextWindow object with status
+        """
+        # Handle both int and list inputs
+        if isinstance(token_count, list):
+            # Simple token estimation: ~4 chars per token
+            total_chars = sum(len(str(msg)) for msg in token_count)
+            estimated_tokens = total_chars // 4
+        else:
+            estimated_tokens = token_count
+        
+        max_tok = max_tokens or self.default_window_size
+        
+        return ContextWindow(max_tokens=max_tok, current_tokens=estimated_tokens)
+    
+    async def check_context_async(self, token_count: int, max_tokens: int | None = None) -> ContextWindow:
+        """Async version of check_context"""
+        return self.check_context(token_count, max_tokens)
+
+
 __all__ = [
     "CustomMessageTypes",
     "convert_to_llm",
@@ -761,4 +858,6 @@ __all__ = [
     "get_dm_history_limit_from_session_key",
     "sanitize_session_history",
     "inject_history_images_into_messages",
+    "ContextManager",
+    "ContextWindow",
 ]

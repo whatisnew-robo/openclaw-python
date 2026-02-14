@@ -70,6 +70,25 @@ class GatewayBootstrap:
         """
         results = {"steps_completed": 0, "errors": []}
         
+        # Pre-Step: Check for first run and trigger onboarding if needed
+        config_path_resolved = config_path or (Path.home() / ".openclaw" / "openclaw.json")
+        
+        if not config_path_resolved.exists():
+            logger.info("First run detected - no configuration found")
+            logger.info("Starting onboarding wizard...")
+            
+            try:
+                from ..wizard.onboarding import run_interactive_onboarding
+                
+                # Run onboarding wizard
+                await run_interactive_onboarding()
+                
+                logger.info("✅ Onboarding complete! Continuing with bootstrap...")
+            except Exception as e:
+                logger.error(f"Onboarding failed: {e}")
+                # If onboarding fails, we should still try to continue with defaults
+                logger.warning("Continuing with default configuration...")
+        
         # Step 1: Set environment variables
         logger.info("Step 1: Setting environment variables")
         self._set_env_vars()
@@ -115,8 +134,31 @@ class GatewayBootstrap:
         
         # Step 6: Resolve default agent and workspace
         logger.info("Step 6: Resolving workspace directory")
-        workspace_dir = Path.home() / ".openclaw" / "workspace"
-        workspace_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Get workspace from config or use default
+        if self.config and hasattr(self.config, 'agent') and hasattr(self.config.agent, 'workspace'):
+            workspace_dir = Path(self.config.agent.workspace).expanduser().resolve()
+        else:
+            workspace_dir = Path.home() / ".openclaw" / "workspace"
+        
+        # Ensure workspace exists with bootstrap files (matching TypeScript behavior)
+        try:
+            from ..agents.ensure_workspace import ensure_agent_workspace
+            skip_bootstrap = False
+            if self.config and hasattr(self.config, 'agent'):
+                skip_bootstrap = getattr(self.config.agent, 'skip_bootstrap', False)
+            
+            workspace_paths = ensure_agent_workspace(
+                workspace_dir=workspace_dir,
+                ensure_bootstrap_files=True,
+                skip_bootstrap=skip_bootstrap,
+            )
+            logger.info(f"Workspace initialized: {workspace_dir}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize workspace bootstrap files: {e}")
+            workspace_dir.mkdir(parents=True, exist_ok=True)
+        
+        results["workspace_dir"] = str(workspace_dir)
         results["steps_completed"] += 1
         
         # Step 7: Load gateway plugins
@@ -210,43 +252,66 @@ class GatewayBootstrap:
         # Step 11: Load skills
         logger.info("Step 11: Loading skills")
         try:
-            from ..agents.skills.loader import SkillLoader
+            from ..skills.loader import SkillLoader
             
             # Get project root (where skills/ directory is)
             project_root = Path(__file__).parent.parent.parent
             bundled_skills_dir = project_root / "skills"
             
-            self.skill_loader = SkillLoader(bundled_skills_dir=bundled_skills_dir)
-            self.skill_loader.load_all_skills()
-            skill_count = len(self.skill_loader.skills)
+            # SkillLoader expects config dict
+            skill_config = {}
+            if self.config and hasattr(self.config, 'skills'):
+                skill_config = self.config.skills.model_dump() if hasattr(self.config.skills, 'model_dump') else {}
+            
+            self.skill_loader = SkillLoader(config=skill_config)
+            loaded_skills = self.skill_loader.load_from_directory(bundled_skills_dir, source="bundled")
+            skill_count = len(loaded_skills)
             logger.info(f"Loaded {skill_count} skills from {bundled_skills_dir}")
         except Exception as e:
             logger.warning(f"Skills loading failed: {e}")
         results["steps_completed"] += 1
         
-        # Step 12: Build cron service
+        # Step 11.5: Create broadcast function for events
+        logger.info("Step 11.5: Creating broadcast function")
+        
+        # Event queue for events before WebSocket server is ready
+        self._event_queue: list[tuple[str, Any, dict | None]] = []
+        
+        def broadcast(event: str, payload: Any, opts: dict | None = None) -> None:
+            """Broadcast event to WebSocket clients"""
+            if hasattr(self, 'server') and self.server:
+                # WebSocket server is ready, broadcast immediately
+                try:
+                    self.server.broadcast(event, payload, opts)
+                except Exception as e:
+                    logger.warning(f"Broadcast failed: {e}")
+            else:
+                # Queue event for later
+                self._event_queue.append((event, payload, opts))
+        
+        self.broadcast = broadcast
+        results["steps_completed"] += 0.5
+        
+        # Step 12: Build cron service (NOT started yet)
         logger.info("Step 12: Building cron service")
         try:
-            from ..cron import CronService
+            from .cron_bootstrap import build_gateway_cron_service
+            from .types import GatewayDeps
             
-            # Cron directories
-            cron_dir = Path.home() / ".openclaw" / "cron"
-            store_path = cron_dir / "jobs.json"
-            log_dir = cron_dir / "runs"
-            
-            # Create cron service
-            self.cron_service = CronService(
-                store_path=store_path,
-                log_dir=log_dir,
-                on_system_event=None,  # Will be set later
-                on_isolated_agent=None,  # Will be set later
-                on_event=None,  # Will be set later
+            # Build cron service with dependency container
+            self.cron_service_state = await build_gateway_cron_service(
+                config=self.config,
+                deps=GatewayDeps(
+                    provider=self.provider,
+                    tools=self.tool_registry.list_tools() if self.tool_registry else [],
+                    session_manager=self.session_manager,
+                    get_channel_manager=lambda: getattr(self, 'channel_manager', None),  # Lazy access
+                ),
+                broadcast=broadcast,
             )
+            self.cron_service = self.cron_service_state.cron
             
-            # Start cron service
-            self.cron_service.start()
-            
-            logger.info(f"Cron service started with {len(self.cron_service.jobs)} jobs")
+            logger.info(f"Cron service initialized with {len(self.cron_service.jobs)} jobs (start deferred)")
         except Exception as e:
             logger.warning(f"Cron service initialization failed: {e}")
         results["steps_completed"] += 1
